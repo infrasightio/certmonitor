@@ -288,15 +288,15 @@ export default function Incidents() {
                           </p>
                         ) : null}
                       </td>
-                      <td className="whitespace-nowrap">
-                        {formatDateTime(incident.started_at, 'dd MMM HH:mm')}
-                        <p className="text-[11px] text-slate-400">
-                          {formatRelative(incident.started_at)}
-                        </p>
+                      <td
+                        className="tnum whitespace-nowrap"
+                        title={formatRelative(incident.started_at)}
+                      >
+                        {formatDateTime(incident.started_at, 'dd MMM yyyy HH:mm')}
                       </td>
-                      <td className="whitespace-nowrap">
+                      <td className="tnum whitespace-nowrap">
                         {incident.resolved_at
-                          ? formatDateTime(incident.resolved_at, 'dd MMM HH:mm')
+                          ? formatDateTime(incident.resolved_at, 'dd MMM yyyy HH:mm')
                           : '—'}
                       </td>
                       <td className="tnum whitespace-nowrap text-right font-medium">

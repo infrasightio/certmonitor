@@ -181,11 +181,16 @@ export default function AuditLogs() {
                 <tbody>
                   {items.map((entry) => (
                     <tr key={entry.id}>
-                      <td className="whitespace-nowrap">
-                        {formatDateTime(entry.created_at, 'dd MMM HH:mm:ss')}
-                        <p className="text-[11px] text-slate-400">
-                          {formatRelative(entry.created_at)}
-                        </p>
+                      {/* The year is not optional here: entries are kept for a
+                          year by default and up to ten, so "14 Sep 10:30:45"
+                          names no particular day on an append-only record
+                          whose whole purpose is attribution. Relative time
+                          moves to the tooltip rather than a second line. */}
+                      <td
+                        className="tnum whitespace-nowrap"
+                        title={formatRelative(entry.created_at)}
+                      >
+                        {formatDateTime(entry.created_at)}
                       </td>
                       <td className="whitespace-nowrap font-medium">
                         {entry.username || <span className="text-slate-400">system</span>}

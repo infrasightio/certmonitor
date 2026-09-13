@@ -357,11 +357,11 @@ export default function Alerts() {
                           </p>
                         ) : null}
                       </td>
-                      <td className="whitespace-nowrap">
-                        {formatRelative(alert.created_at)}
-                        <p className="text-[11px] text-slate-400">
-                          {formatDateTime(alert.created_at, 'dd MMM HH:mm')}
-                        </p>
+                      <td
+                        className="tnum whitespace-nowrap"
+                        title={formatRelative(alert.created_at)}
+                      >
+                        {formatDateTime(alert.created_at, 'dd MMM yyyy HH:mm')}
                       </td>
                       <td className="text-right">
                         {canWrite ? (
