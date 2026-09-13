@@ -28,6 +28,8 @@ const EMPTY = {
   dependency_ids: [],
   description: '',
   owner: '',
+  owner_name: '',
+  master_node_ip: '',
   team: '',
   application: '',
   monitoring_enabled: true,
@@ -116,6 +118,8 @@ export default function EndpointForm({ open, onClose, onSaved, endpoint, filters
         expected_body_substring: endpoint.expected_body_substring ?? '',
         description: endpoint.description ?? '',
         owner: endpoint.owner ?? '',
+        owner_name: endpoint.owner_name ?? '',
+        master_node_ip: endpoint.master_node_ip ?? '',
         team: endpoint.team ?? '',
         application: endpoint.application ?? '',
         request_body: endpoint.request_body ?? '',
@@ -187,6 +191,8 @@ export default function EndpointForm({ open, onClose, onSaved, endpoint, filters
       dependency_ids: form.dependency_ids,
       description: form.description || null,
       owner: form.owner || null,
+      owner_name: form.owner_name || null,
+      master_node_ip: form.master_node_ip || null,
       team: form.team || null,
       application: form.application || null,
       monitoring_enabled: form.monitoring_enabled,
@@ -556,15 +562,28 @@ export default function EndpointForm({ open, onClose, onSaved, endpoint, filters
           />
         </Field>
 
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Field label="Owner">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Owner" hint="Who to go to. Shown instead of the address.">
+            <input
+              className="input"
+              value={form.owner_name}
+              onChange={setInput('owner_name')}
+              placeholder="Rishabh Gupta"
+              maxLength={128}
+            />
+          </Field>
+          <Field label="Owner contact" hint="Email or handle. Kept, but not shown as the name.">
             <input
               className="input"
               value={form.owner}
               onChange={setInput('owner')}
               placeholder="platform@example.com"
+              maxLength={128}
             />
           </Field>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-3">
           <Field label="Team">
             <input className="input" value={form.team} onChange={setInput('team')} />
           </Field>
@@ -573,6 +592,18 @@ export default function EndpointForm({ open, onClose, onSaved, endpoint, filters
               className="input"
               value={form.application}
               onChange={setInput('application')}
+            />
+          </Field>
+          <Field
+            label="Master node / host"
+            hint="Where it runs, for whoever has to go and look."
+          >
+            <input
+              className="input"
+              value={form.master_node_ip}
+              onChange={setInput('master_node_ip')}
+              placeholder="10.0.1.4 (prod-master-1)"
+              maxLength={128}
             />
           </Field>
         </div>

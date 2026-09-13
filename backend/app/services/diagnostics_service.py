@@ -2659,6 +2659,12 @@ async def diagnose(
         "url": endpoint.url,
         "application": endpoint.application,
         "environment": environment_name,
+        # Who to tell and where to look. A diagnosis that localises the fault
+        # but leaves the reader hunting for the owner or the host has stopped
+        # one step short of useful.
+        "owner": endpoint.owner_name or endpoint.owner,
+        "owner_contact": endpoint.owner,
+        "master_node_ip": endpoint.master_node_ip,
         "current_status": endpoint.current_status,
         "generated_at": datetime.now(timezone.utc),
         "elapsed_ms": elapsed,

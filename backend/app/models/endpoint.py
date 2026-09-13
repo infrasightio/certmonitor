@@ -171,9 +171,19 @@ class Endpoint(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
     description: Mapped[str | None] = mapped_column(Text)
+    # `owner` is the contact handle people actually type - almost always an
+    # email. `owner_name` is who that is, so a screen can show a person
+    # rather than an address and still keep the address to contact them by.
     owner: Mapped[str | None] = mapped_column(String(128), index=True)
+    owner_name: Mapped[str | None] = mapped_column(String(128))
     team: Mapped[str | None] = mapped_column(String(128), index=True)
     application: Mapped[str | None] = mapped_column(String(128), index=True)
+
+    # Where this service is hosted, for the person who has to go and look.
+    # Free text rather than a validated address: a cluster is named
+    # inconsistently across a fleet, and refusing "10.0.1.4 (prod-master-1)"
+    # would only push it into the description field.
+    master_node_ip: Mapped[str | None] = mapped_column(String(128))
 
     # ---------------------------------------------------- check settings
     monitoring_enabled: Mapped[bool] = mapped_column(

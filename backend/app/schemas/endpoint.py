@@ -179,9 +179,21 @@ class EndpointBase(BaseModel):
     )
     tags: list[str] = Field(default_factory=list, max_length=20)
     description: str | None = None
-    owner: str | None = Field(default=None, max_length=128)
+    owner: str | None = Field(
+        default=None, max_length=128, description="Contact handle, usually an email."
+    )
+    owner_name: str | None = Field(
+        default=None,
+        max_length=128,
+        description="Who that contact is, shown in place of the address.",
+    )
     team: str | None = Field(default=None, max_length=128)
     application: str | None = Field(default=None, max_length=128)
+    master_node_ip: str | None = Field(
+        default=None,
+        max_length=128,
+        description="Host or cluster node the service runs on, for whoever has to go and look.",
+    )
     dependency_ids: list[uuid.UUID] = Field(
         default_factory=list,
         max_length=20,
@@ -292,8 +304,10 @@ class EndpointUpdate(BaseModel):
     tags: list[str] | None = Field(default=None, max_length=20)
     description: str | None = None
     owner: str | None = Field(default=None, max_length=128)
+    owner_name: str | None = Field(default=None, max_length=128)
     team: str | None = Field(default=None, max_length=128)
     application: str | None = Field(default=None, max_length=128)
+    master_node_ip: str | None = Field(default=None, max_length=128)
     dependency_ids: list[uuid.UUID] | None = Field(default=None, max_length=20)
     monitoring_enabled: bool | None = None
     is_paused: bool | None = None
@@ -361,8 +375,10 @@ class EndpointListItem(ORMModel):
     environment: EnvironmentRead | None = None
     tags: list[TagRead] = Field(default_factory=list)
     owner: str | None = None
+    owner_name: str | None = None
     team: str | None = None
     application: str | None = None
+    master_node_ip: str | None = None
 
     monitoring_enabled: bool
     is_paused: bool

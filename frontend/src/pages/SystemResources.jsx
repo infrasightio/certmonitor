@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
+  Activity,
   AlertTriangle,
   Cpu,
   Database,
@@ -18,7 +19,12 @@ import {
   PageHeader,
 } from '../components/ui'
 import { systemApi } from '../lib/api'
-import { formatDateTime, formatNumber, formatRelative } from '../lib/format'
+import {
+  formatDateTime,
+  formatDuration,
+  formatNumber,
+  formatRelative,
+} from '../lib/format'
 import { useBranding } from '../hooks/useBranding'
 import { LIVE_INTERVAL, useAutoRefresh } from '../hooks/useAutoRefresh'
 
@@ -182,8 +188,19 @@ export default function SystemResources() {
     )
   }
 
-  const { disk, database, redis, api, workers, days_until_disk_full } = data
+  const {
+    disk,
+    database,
+    redis,
+    api,
+    workers,
+    monitoring,
+    days_until_disk_full,
+  } = data
   const diskCritical = disk.used_percent != null && disk.used_percent >= 90
+  // A backlog is the signal to scale; a big one means the state on every
+  // other screen is already stale.
+  const behind = (monitoring?.overdue_endpoints ?? 0) > 0
 
   return (
     <>
@@ -214,6 +231,80 @@ export default function SystemResources() {
             Settings, or add disk.
           </p>
         </div>
+      ) : null}
+
+      {/* ----------------------------------------------- is it keeping up */}
+      {monitoring ? (
+        <Card
+          className="mb-4"
+          title={
+            <span className="flex items-center gap-1.5">
+              <Activity size={15} /> Monitoring throughput
+            </span>
+          }
+        >
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Checks / minute</p>
+              <p className="tnum text-xl font-semibold">
+                {formatNumber(monitoring.checks_per_minute)}
+              </p>
+              <p className="text-[11px] text-slate-400">
+                {formatNumber(monitoring.checks_last_hour)} in the last hour
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Endpoints monitored</p>
+              <p className="tnum text-xl font-semibold">
+                {formatNumber(monitoring.endpoints_monitored)}
+              </p>
+              <p className="text-[11px] text-slate-400">enabled and not paused</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Overdue</p>
+              <p
+                className={clsx(
+                  'tnum text-xl font-semibold',
+                  behind
+                    ? 'text-amber-600 dark:text-amber-400'
+                    : 'text-green-600 dark:text-green-400',
+                )}
+              >
+                {formatNumber(monitoring.overdue_endpoints)}
+              </p>
+              <p className="text-[11px] text-slate-400">
+                {behind && monitoring.worst_overdue_seconds != null
+                  ? `worst ${formatDuration(monitoring.worst_overdue_seconds)} late`
+                  : 'nothing waiting to be claimed'}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Failed / hour</p>
+              <p className="tnum text-xl font-semibold">
+                {formatNumber(monitoring.failed_last_hour)}
+              </p>
+              <p className="text-[11px] text-slate-400">
+                {monitoring.last_check_at
+                  ? `last check ${formatRelative(monitoring.last_check_at)}`
+                  : 'no checks recorded yet'}
+              </p>
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+            {behind ? (
+              <>
+                Checks are due but unclaimed, so what every other screen shows is
+                already behind reality. Scale the worker —{' '}
+                <code className="font-mono text-[11px]">
+                  docker compose up -d --scale worker=3
+                </code>{' '}
+                — or lengthen the intervals.
+              </>
+            ) : (
+              'Nothing is waiting to be claimed, so the state on every other screen is current.'
+            )}
+          </p>
+        </Card>
       ) : null}
 
       <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">

@@ -424,6 +424,104 @@ async def worker_stats(session: AsyncSession) -> list[dict[str, Any]]:
 
 
 # ---------------------------------------------------------------- summary
+async def monitoring_throughput(session: AsyncSession) -> dict[str, Any]:
+    """Is the monitoring keeping up?
+
+    The most important question on this page, and the one nothing else
+    answers: a worker that has fallen behind reports stale state while every
+    other figure here looks healthy. ``overdue_endpoints`` is what "you need
+    another worker" actually looks like - checks whose time has come and gone
+    without anyone claiming them.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from app.models.endpoint import Endpoint
+
+    now = datetime.now(timezone.utc)
+    hour_ago = now - timedelta(hours=1)
+    day_ago = now - timedelta(days=1)
+
+    try:
+        checks_hour = int(
+            (
+                await session.execute(
+                    select(func.count(MonitoringResult.id)).where(
+                        MonitoringResult.checked_at >= hour_ago
+                    )
+                )
+            ).scalar()
+            or 0
+        )
+        failed_hour = int(
+            (
+                await session.execute(
+                    select(func.count(MonitoringResult.id)).where(
+                        MonitoringResult.checked_at >= hour_ago,
+                        MonitoringResult.status != "up",
+                    )
+                )
+            ).scalar()
+            or 0
+        )
+        checks_day = int(
+            (
+                await session.execute(
+                    select(func.count(MonitoringResult.id)).where(
+                        MonitoringResult.checked_at >= day_ago
+                    )
+                )
+            ).scalar()
+            or 0
+        )
+        last_check = (
+            await session.execute(select(func.max(MonitoringResult.checked_at)))
+        ).scalar()
+
+        monitored = int(
+            (
+                await session.execute(
+                    select(func.count(Endpoint.id)).where(
+                        Endpoint.monitoring_enabled.is_(True),
+                        Endpoint.is_paused.is_(False),
+                    )
+                )
+            ).scalar()
+            or 0
+        )
+        # Due, unclaimed, and still waiting. A lease that has not expired
+        # means a worker already holds it, so that is not a backlog.
+        overdue_stmt = select(
+            func.count(Endpoint.id), func.min(Endpoint.next_check_at)
+        ).where(
+            Endpoint.monitoring_enabled.is_(True),
+            Endpoint.is_paused.is_(False),
+            Endpoint.next_check_at.isnot(None),
+            Endpoint.next_check_at < now,
+            (Endpoint.lease_expires_at.is_(None)) | (Endpoint.lease_expires_at < now),
+        )
+        overdue_count, oldest_due = (await session.execute(overdue_stmt)).one()
+    except Exception as exc:  # pragma: no cover - the page degrades, not fails
+        logger.warning("monitoring_throughput_failed", error=str(exc))
+        return {}
+
+    worst_overdue = None
+    if oldest_due is not None:
+        if oldest_due.tzinfo is None:
+            oldest_due = oldest_due.replace(tzinfo=timezone.utc)
+        worst_overdue = max(0, int((now - oldest_due).total_seconds()))
+
+    return {
+        "checks_last_hour": checks_hour,
+        "checks_last_24h": checks_day,
+        "checks_per_minute": round(checks_hour / 60.0, 2),
+        "failed_last_hour": failed_hour,
+        "overdue_endpoints": int(overdue_count or 0),
+        "worst_overdue_seconds": worst_overdue,
+        "endpoints_monitored": monitored,
+        "last_check_at": last_check,
+    }
+
+
 async def snapshot(session: AsyncSession) -> dict[str, Any]:
     """Everything InfraSight can honestly say about its own resource use."""
     from datetime import datetime, timezone
@@ -449,6 +547,7 @@ async def snapshot(session: AsyncSession) -> dict[str, Any]:
         "redis": await redis_stats(),
         "api": process_stats("api"),
         "workers": await worker_stats(session),
+        "monitoring": await monitoring_throughput(session) or None,
         "days_until_disk_full": days_until_full,
         # Said out loud rather than left as a gap in the UI.
         "not_measured": [

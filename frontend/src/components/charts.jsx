@@ -16,6 +16,7 @@ import {
   YAxis,
 } from 'recharts'
 import { Table2 } from 'lucide-react'
+import clsx from 'clsx'
 
 import { formatDateTime, formatMs, formatNumber, formatPercent } from '../lib/format'
 
@@ -456,7 +457,7 @@ const STATUS_ORDER = [
  * keeps them comparable. Every segment is named and counted in the legend, so
  * the status hues reinforce rather than carry the meaning.
  */
-export function StatusDistribution({ counts, total }) {
+export function StatusDistribution({ counts, total, onSelect }) {
   const segments = STATUS_ORDER.map((entry) => ({
     ...entry,
     count: counts?.[entry.key] || 0,
@@ -464,46 +465,74 @@ export function StatusDistribution({ counts, total }) {
 
   if (!total) return <NoData label="No endpoints configured yet." />
 
+  // Every figure on this chart is a set of endpoints, so every figure is a
+  // way into that set. Rendered as real buttons when a target exists, so
+  // they are keyboard-reachable and look interactive rather than only
+  // behaving that way on click.
+  const Segment = onSelect ? 'button' : 'div'
+  const Row = onSelect ? 'button' : 'span'
+
   return (
     <div>
       <div
         className="flex h-7 w-full gap-[2px] overflow-hidden rounded-md"
-        role="img"
-        aria-label={segments
-          .map((s) => `${s.label}: ${s.count} of ${total}`)
-          .join(', ')}
+        role={onSelect ? undefined : 'img'}
+        aria-label={
+          onSelect
+            ? undefined
+            : segments.map((s) => `${s.label}: ${s.count} of ${total}`).join(', ')
+        }
       >
         {segments.map((segment) => {
           const share = (segment.count / total) * 100
           return (
-            <div
+            <Segment
               key={segment.key}
-              className="grid place-items-center text-[11px] font-semibold text-white"
+              type={onSelect ? 'button' : undefined}
+              onClick={onSelect ? () => onSelect(segment.key) : undefined}
+              className={clsx(
+                'grid place-items-center text-[11px] font-semibold text-white',
+                onSelect &&
+                  'cursor-pointer transition-opacity hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1',
+              )}
               style={{ width: `${share}%`, backgroundColor: segment.color }}
-              title={`${segment.label}: ${segment.count} (${share.toFixed(1)}%)`}
+              title={`${segment.label}: ${segment.count} (${share.toFixed(1)}%)${
+                onSelect ? ' — click to view these endpoints' : ''
+              }`}
             >
               {/* Only label a segment wide enough to hold the text; the rest
                   read their value from the legend below. */}
               {share >= 9 ? segment.count : null}
-            </div>
+            </Segment>
           )
         })}
       </div>
       <ul className="mt-3 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
         {segments.map((segment) => (
-          <li key={segment.key} className="flex items-center gap-1.5 text-xs">
-            <span
-              className="h-2.5 w-2.5 shrink-0 rounded-sm"
-              style={{ backgroundColor: segment.color }}
-              aria-hidden="true"
-            />
-            <span className="text-slate-600 dark:text-slate-300">{segment.label}</span>
-            <span className="tnum ml-auto font-semibold text-slate-900 dark:text-slate-100">
-              {segment.count}
-            </span>
-            <span className="tnum w-12 text-right text-slate-400">
-              {((segment.count / total) * 100).toFixed(1)}%
-            </span>
+          <li key={segment.key}>
+            <Row
+              type={onSelect ? 'button' : undefined}
+              onClick={onSelect ? () => onSelect(segment.key) : undefined}
+              className={clsx(
+                'flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-xs',
+                onSelect &&
+                  'cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800',
+              )}
+              title={onSelect ? `View ${segment.label.toLowerCase()} endpoints` : undefined}
+            >
+              <span
+                className="h-2.5 w-2.5 shrink-0 rounded-sm"
+                style={{ backgroundColor: segment.color }}
+                aria-hidden="true"
+              />
+              <span className="text-slate-600 dark:text-slate-300">{segment.label}</span>
+              <span className="tnum ml-auto font-semibold text-slate-900 dark:text-slate-100">
+                {segment.count}
+              </span>
+              <span className="tnum w-12 text-right text-slate-400">
+                {((segment.count / total) * 100).toFixed(1)}%
+              </span>
+            </Row>
           </li>
         ))}
       </ul>
@@ -694,7 +723,7 @@ const BUCKET_TONE = (bucket) => {
  * reinforce urgency. Counts are labelled directly above each bar, which is the
  * documented relief for status hues that fall below 3:1 on a light surface.
  */
-export function SslExpiryChart({ buckets, height = 220, mode }) {
+export function SslExpiryChart({ buckets, height = 220, mode, onSelect }) {
   const chrome = CHROME[mode]
   const data = (buckets || []).filter((bucket) => bucket.count > 0)
 
@@ -739,6 +768,8 @@ export function SslExpiryChart({ buckets, height = 220, mode }) {
           name="Certificates"
           radius={[4, 4, 0, 0]}
           isAnimationActive={false}
+          cursor={onSelect ? 'pointer' : undefined}
+          onClick={onSelect ? (entry) => onSelect(entry?.payload ?? entry) : undefined}
         >
           {data.map((bucket) => (
             <Cell key={bucket.bucket} fill={BUCKET_TONE(bucket.bucket)} />
@@ -756,7 +787,7 @@ export function SslExpiryChart({ buckets, height = 220, mode }) {
 }
 
 // ---------------------------------------------------------- failure counts
-export function FailureBars({ endpoints, height = 220, mode }) {
+export function FailureBars({ endpoints, height = 220, mode, onSelect }) {
   const chrome = CHROME[mode]
   const data = (endpoints || []).slice(0, 8)
 
@@ -810,6 +841,8 @@ export function FailureBars({ endpoints, height = 220, mode }) {
           fill={STATUS.critical}
           radius={[0, 4, 4, 0]}
           isAnimationActive={false}
+          cursor={onSelect ? 'pointer' : undefined}
+          onClick={onSelect ? (entry) => onSelect(entry?.payload ?? entry) : undefined}
         >
           <LabelList
             dataKey="failed_checks"

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   Activity,
   AlertTriangle,
@@ -103,8 +103,26 @@ function StatTile({ icon: Icon, label, value, sub, tone = 'neutral', to }) {
   )
 }
 
+/**
+ * Which SSL page filter each expiry bucket corresponds to.
+ *
+ * The chart counts by days remaining; the SSL page filters by the same
+ * thing, so a bucket maps onto a real query rather than an approximation of
+ * one. Buckets past 90 days have nothing worth filtering to - the whole
+ * healthy tail - so they open the unfiltered inventory.
+ */
+const SSL_BUCKET_FILTER = {
+  expired: { status: 'expired' },
+  '0-7 days': { expiring_within_days: 7 },
+  '8-14 days': { expiring_within_days: 14 },
+  '15-30 days': { expiring_within_days: 30 },
+  '31-60 days': { expiring_within_days: 60 },
+  '61-90 days': { expiring_within_days: 90 },
+}
+
 export default function Dashboard() {
   const toast = useToast()
+  const navigate = useNavigate()
   const mode = useChartMode()
 
   const [window_, setWindow] = useState('24h')
@@ -562,6 +580,7 @@ export default function Dashboard() {
                 <StatusDistribution
                   counts={statusCounts}
                   total={summary.total_endpoints}
+                  onSelect={(status) => navigate(`/endpoints?status=${status}`)}
                 />
               </div>
             </section>
@@ -598,7 +617,18 @@ export default function Dashboard() {
                 </table>
               }
             >
-              <SslExpiryChart buckets={data.ssl_expiry_timeline} mode={mode} />
+              <SslExpiryChart
+                buckets={data.ssl_expiry_timeline}
+                mode={mode}
+                onSelect={(point) => {
+                  const filter = SSL_BUCKET_FILTER[point?.bucket]
+                  navigate(
+                    filter
+                      ? `/ssl?${new URLSearchParams(filter).toString()}`
+                      : '/ssl',
+                  )
+                }}
+              />
             </ChartFrame>
           </div>
 
@@ -665,7 +695,13 @@ export default function Dashboard() {
                 </table>
               }
             >
-              <FailureBars endpoints={data.top_failing_endpoints} mode={mode} />
+              <FailureBars
+                endpoints={data.top_failing_endpoints}
+                mode={mode}
+                onSelect={(point) =>
+                  point?.endpoint_id && navigate(`/endpoints/${point.endpoint_id}`)
+                }
+              />
             </ChartFrame>
 
             <section className="card">

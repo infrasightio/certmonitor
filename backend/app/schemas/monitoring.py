@@ -454,6 +454,9 @@ class DiagnosticsResponse(BaseModel):
     url: str
     application: str | None = None
     environment: str | None = None
+    owner: str | None = None
+    owner_contact: str | None = None
+    master_node_ip: str | None = None
     current_status: str
     generated_at: datetime
     elapsed_ms: float

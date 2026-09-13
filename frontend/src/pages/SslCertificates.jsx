@@ -39,7 +39,9 @@ export default function SslCertificates() {
   const [issuer, setIssuer] = useState('')
   const [environment, setEnvironment] = useState('')
   const [tag, setTag] = useState('')
-  const [expiringWithin, setExpiringWithin] = useState('')
+  const [expiringWithin, setExpiringWithin] = useState(
+    searchParams.get('expiring_within_days') || '',
+  )
   const [sortBy, setSortBy] = useState('remaining')
   const [sortDir, setSortDir] = useState('asc')
 
@@ -58,11 +60,14 @@ export default function SslCertificates() {
     endpointsApi.filters().then(setFilters).catch(() => {})
   }, [])
 
+  // Kept in the URL so a filtered view is shareable, and so arriving from a
+  // dashboard chart lands on the rows that chart was counting.
   useEffect(() => {
     const next = {}
     if (status) next.status = status
+    if (expiringWithin) next.expiring_within_days = expiringWithin
     setSearchParams(next, { replace: true })
-  }, [status, setSearchParams])
+  }, [status, expiringWithin, setSearchParams])
 
   const load = useCallback(
     async ({ silent = false } = {}) => {

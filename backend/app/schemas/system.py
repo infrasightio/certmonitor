@@ -116,6 +116,29 @@ class NotMeasured(BaseModel):
     reason: str
 
 
+class MonitoringThroughput(BaseModel):
+    """Whether the monitoring itself is keeping up.
+
+    A monitoring tool that has fallen behind reports stale state while
+    looking perfectly healthy, so this is the number that says whether
+    anything else on the page can be trusted. ``overdue_endpoints`` is the
+    one to watch: checks due but not yet claimed, which is what "add another
+    worker" actually looks like.
+    """
+
+    checks_last_hour: int = 0
+    checks_last_24h: int = 0
+    checks_per_minute: float = 0.0
+    failed_last_hour: int = 0
+    # Enabled, unpaused endpoints whose next check is already in the past.
+    overdue_endpoints: int = 0
+    # How far behind the most overdue one is. None when nothing is overdue.
+    worst_overdue_seconds: int | None = None
+    endpoints_monitored: int = 0
+    # Most recent check written by any worker - the freshness of everything.
+    last_check_at: datetime | None = None
+
+
 class ResourceSnapshot(BaseModel):
     generated_at: datetime
     disk: DiskUsage
@@ -123,6 +146,7 @@ class ResourceSnapshot(BaseModel):
     redis: RedisUsage
     api: ProcessUsage
     workers: list[WorkerUsage] = Field(default_factory=list)
+    monitoring: MonitoringThroughput | None = None
     # Only computed while the database is still growing - see
     # DatabaseUsage.at_steady_state.
     days_until_disk_full: int | None = None

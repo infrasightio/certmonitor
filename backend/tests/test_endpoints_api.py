@@ -333,6 +333,53 @@ class TestListAndFilter:
         assert 30 in body["allowed_intervals"]
 
 
+class TestOwnerAndHost:
+    """Who owns it and where it runs - the two things you need when it breaks."""
+
+    async def test_owner_name_and_node_round_trip(self, client, admin_headers):
+        response = await client.post(
+            "/api/endpoints",
+            json={
+                **BASE,
+                "owner": "platform@example.com",
+                "owner_name": "Rishabh Gupta",
+                "master_node_ip": "10.0.1.4 (prod-master-1)",
+            },
+            headers=admin_headers,
+        )
+
+        assert response.status_code == 201, response.text
+        body = response.json()
+        # The address is kept - it is how you contact them - but the name is
+        # what a screen can show instead.
+        assert body["owner"] == "platform@example.com"
+        assert body["owner_name"] == "Rishabh Gupta"
+        assert body["master_node_ip"] == "10.0.1.4 (prod-master-1)"
+
+    async def test_they_can_be_edited(self, client, admin_headers):
+        created = await client.post("/api/endpoints", json=BASE, headers=admin_headers)
+        endpoint_id = created.json()["id"]
+
+        response = await client.put(
+            f"/api/endpoints/{endpoint_id}",
+            json={"owner_name": "Amit Shah", "master_node_ip": "10.0.2.9"},
+            headers=admin_headers,
+        )
+
+        assert response.json()["owner_name"] == "Amit Shah"
+        assert response.json()["master_node_ip"] == "10.0.2.9"
+
+    async def test_an_endpoint_without_them_is_still_valid(
+        self, client, admin_headers
+    ):
+        """Both are optional - a fleet is annotated over time, not up front."""
+        response = await client.post("/api/endpoints", json=BASE, headers=admin_headers)
+
+        assert response.status_code == 201
+        assert response.json()["owner_name"] is None
+        assert response.json()["master_node_ip"] is None
+
+
 class TestStatusSummary:
     """The header chips. Each count must match the rows its filter returns."""
 

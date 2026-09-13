@@ -362,6 +362,38 @@ export default function DiagnosticsPanel({
               {report.summary}
             </p>
 
+            {/* Who to tell and where to look. A report that localises the fault
+                but leaves the reader hunting for the owner has stopped a step
+                short of useful. */}
+            {report.owner || report.master_node_ip ? (
+              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+                {report.owner ? (
+                  <span>
+                    Owner:{' '}
+                    {report.owner_contact ? (
+                      <a
+                        href={`mailto:${report.owner_contact}`}
+                        className="text-brand-600 hover:underline dark:text-brand-400"
+                        title={report.owner_contact}
+                      >
+                        {report.owner}
+                      </a>
+                    ) : (
+                      <span className="text-slate-700 dark:text-slate-200">{report.owner}</span>
+                    )}
+                  </span>
+                ) : null}
+                {report.master_node_ip ? (
+                  <span>
+                    Runs on:{' '}
+                    <span className="font-mono text-slate-700 dark:text-slate-200">
+                      {report.master_node_ip}
+                    </span>
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+
             {report.root_cause ? (
               <div className="mt-2.5 rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-800/60">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">

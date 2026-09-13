@@ -495,11 +495,29 @@ export default function EndpointDetail() {
           {(endpoint.tags || []).map((tag) => (
             <TagChip key={tag.id} name={tag.name} />
           ))}
-          {endpoint.owner ? (
-            <span className="text-xs text-slate-500">Owner: {endpoint.owner}</span>
+          {endpoint.owner_name || endpoint.owner ? (
+            <span className="text-xs text-slate-500">
+              Owner:{' '}
+              {endpoint.owner_name && endpoint.owner ? (
+                <a
+                  href={`mailto:${endpoint.owner}`}
+                  className="text-brand-600 hover:underline dark:text-brand-400"
+                  title={endpoint.owner}
+                >
+                  {endpoint.owner_name}
+                </a>
+              ) : (
+                endpoint.owner_name || endpoint.owner
+              )}
+            </span>
           ) : null}
           {endpoint.team ? (
             <span className="text-xs text-slate-500">Team: {endpoint.team}</span>
+          ) : null}
+          {endpoint.master_node_ip ? (
+            <span className="text-xs text-slate-500">
+              Node: <span className="font-mono">{endpoint.master_node_ip}</span>
+            </span>
           ) : null}
         </div>
       </div>
@@ -1008,6 +1026,24 @@ export default function EndpointDetail() {
               {formatInterval(endpoint.interval_seconds)}
             </DetailRow>
             <DetailRow label="Timeout">{endpoint.timeout_seconds}s</DetailRow>
+            <DetailRow label="Owner">
+              {endpoint.owner_name || endpoint.owner ? (
+                <>
+                  {endpoint.owner_name || endpoint.owner}
+                  {endpoint.owner_name && endpoint.owner ? (
+                    <a
+                      href={`mailto:${endpoint.owner}`}
+                      className="ml-1.5 font-mono text-xs text-brand-600 hover:underline dark:text-brand-400"
+                    >
+                      {endpoint.owner}
+                    </a>
+                  ) : null}
+                </>
+              ) : null}
+            </DetailRow>
+            <DetailRow label="Master node / host" mono>
+              {endpoint.master_node_ip}
+            </DetailRow>
             <DetailRow label="Follow redirects">
               {endpoint.follow_redirects ? 'Yes' : 'No'}
             </DetailRow>
