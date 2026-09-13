@@ -27,7 +27,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.api.branding import router as branding_router
 from app.api.health import router as health_router
-from app.api.v1 import api_router
+from app.api.routes import api_router
 from app.core.config import settings
 from app.core.database import SessionFactory, dispose_engine
 from app.core.logging import configure_logging, get_logger

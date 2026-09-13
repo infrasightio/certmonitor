@@ -1,9 +1,9 @@
-"""API v1 router aggregation."""
+"""Router aggregation: every application route, mounted under the API prefix."""
 
 from fastapi import APIRouter
 
 from app.api.deps import ChangeManagementEnabled
-from app.api.v1 import (
+from app.api.routes import (
     auth,
     changes,
     dashboard,

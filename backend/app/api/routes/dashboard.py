@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import datetime, timezone
 from typing import Annotated
@@ -18,6 +19,7 @@ from app.api.deps import (
     parse_uuid_list,
     split_csv_param,
 )
+from app.core.database import SessionFactory
 from app.core.enums import AuditAction, SslStatus
 from app.models.endpoint import Endpoint
 from app.models.monitoring import SslCertificate
@@ -44,6 +46,21 @@ from app.services import (
 from app.services.stats_service import DashboardFilters
 
 router = APIRouter(tags=["Dashboard"])
+
+
+async def _in_parallel(*branches):
+    """Run independent read-only branches at the same time, one session each.
+
+    Every branch opens its own session because a single AsyncSession cannot
+    serve overlapping queries. These are reads with no transaction to
+    coordinate, so there is nothing to keep consistent between them beyond
+    the window they were all given.
+    """
+    async def run(branch):
+        async with SessionFactory() as branch_session:
+            return await branch(branch_session)
+
+    return await asyncio.gather(*(run(branch) for branch in branches))
 
 
 def _build_filters(
@@ -77,7 +94,6 @@ def _incident_to_schema(incident) -> IncidentRead:
     summary="Everything the dashboard renders, in one request",
 )
 async def get_dashboard(
-    session: DbSession,
     _user: ReadEndpoints,
     config: RuntimeConfig,
     window: Annotated[str, Query(pattern="^(24h|7d|30d|90d)$")] = "24h",
@@ -100,38 +116,67 @@ async def get_dashboard(
     until = datetime.now(timezone.utc)
     since = until - stats_service.WINDOWS[window]
 
-    summary = await stats_service.dashboard_summary(
-        session, filters=filters, window=window
-    )
-    endpoint_ids = await stats_service.filtered_endpoint_ids(session, filters)
+    # This page is ~20 aggregate queries over the same window, and awaiting
+    # them one after another made opening the dashboard feel broken. They are
+    # independent reads, so they run as five concurrent branches instead -
+    # wall time becomes the slowest branch rather than the sum.
+    #
+    # Each branch needs its own session: a single AsyncSession cannot serve
+    # overlapping queries, and sharing one here raises as soon as two land
+    # together. Five is deliberate rather than one-per-query - it keeps the
+    # connection cost of a dashboard load bounded and well inside the pool.
+    async def summary_branch(s):
+        return await stats_service.dashboard_summary(
+            s, filters=filters, window=window
+        )
 
-    series = await stats_service.global_response_time_series(
-        session, since=since, until=until, endpoint_ids=endpoint_ids
-    )
+    async def series_branch(s):
+        endpoint_ids = await stats_service.filtered_endpoint_ids(s, filters)
+        return await stats_service.global_response_time_series(
+            s, since=since, until=until, endpoint_ids=endpoint_ids
+        )
 
-    by_environment = await stats_service.availability_by_group(
-        session, group="environment", filters=filters, window=window
-    )
-    by_tag = await stats_service.availability_by_group(
-        session, group="tag", filters=filters, window=window
-    )
-    by_team = await stats_service.availability_by_group(
-        session, group="team", filters=filters, window=window
-    )
+    async def groups_branch(s):
+        return [
+            await stats_service.availability_by_group(
+                s, group=group, filters=filters, window=window
+            )
+            for group in ("environment", "tag", "team")
+        ]
 
-    timeline = await stats_service.ssl_expiry_timeline(session, filters=filters)
-    failing = await stats_service.failure_counts(
-        session, since=since, until=until, filters=filters
-    )
-    slowest = await stats_service.slowest_endpoints(
-        session, since=since, until=until, filters=filters
-    )
+    async def ranking_branch(s):
+        return (
+            await stats_service.ssl_expiry_timeline(s, filters=filters),
+            await stats_service.failure_counts(
+                s, since=since, until=until, filters=filters
+            ),
+            await stats_service.slowest_endpoints(
+                s, since=since, until=until, filters=filters
+            ),
+        )
 
-    open_incidents = await stats_service.recent_incidents(
-        session, limit=25, filters=filters, open_only=True
-    )
-    recent = await stats_service.recent_incidents(
-        session, limit=15, filters=filters, open_only=False
+    async def incidents_branch(s):
+        return (
+            await stats_service.recent_incidents(
+                s, limit=25, filters=filters, open_only=True
+            ),
+            await stats_service.recent_incidents(
+                s, limit=15, filters=filters, open_only=False
+            ),
+        )
+
+    (
+        summary,
+        series,
+        (by_environment, by_tag, by_team),
+        (timeline, failing, slowest),
+        (open_incidents, recent),
+    ) = await _in_parallel(
+        summary_branch,
+        series_branch,
+        groups_branch,
+        ranking_branch,
+        incidents_branch,
     )
 
     sla_target = float(config.get("uptime_sla_target", 99.9))

@@ -357,13 +357,12 @@ export default function EndpointForm({ open, onClose, onSaved, endpoint, filters
 
         {testResult ? (
           <div
-            className={`rounded-lg border px-3 py-2 text-sm ${
-              testResult.status === 'up'
-                ? 'border-green-200 bg-green-50 text-green-900 dark:border-green-900 dark:bg-green-950/50 dark:text-green-200'
-                : testResult.status === 'degraded'
-                  ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200'
-                  : 'border-red-200 bg-red-50 text-red-900 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200'
-            }`}
+            className={`rounded-lg border px-3 py-2 text-sm ${testResult.status === 'up'
+              ? 'border-green-200 bg-green-50 text-green-900 dark:border-green-900 dark:bg-green-950/50 dark:text-green-200'
+              : testResult.status === 'degraded'
+                ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200'
+                : 'border-red-200 bg-red-50 text-red-900 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200'
+              }`}
           >
             <p className="font-medium">
               Test result: {testResult.status?.toUpperCase()}

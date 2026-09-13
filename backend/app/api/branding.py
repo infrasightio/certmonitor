@@ -6,7 +6,7 @@ that cannot present a token.
 
 Only branding is exposed. Nothing else from ``system_settings`` may be added
 here - the rest of that table is admin-only and reachable through
-``/api/v1/settings``.
+``/api/settings``.
 """
 
 from __future__ import annotations
