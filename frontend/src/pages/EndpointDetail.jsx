@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
   Clock,
+  Network,
   Pause,
   Pencil,
   Play,
@@ -69,6 +70,7 @@ const TABS = [
   { id: 'overview', label: 'Overview' },
   { id: 'history', label: 'Check history' },
   { id: 'incidents', label: 'Incidents' },
+  { id: 'network', label: 'Network' },
   { id: 'certificate', label: 'Certificate' },
   { id: 'configuration', label: 'Configuration' },
 ]
@@ -99,6 +101,8 @@ export default function EndpointDetail() {
   const [historyPage, setHistoryPage] = useState(1)
   const [historyStatus, setHistoryStatus] = useState('')
   const [incidents, setIncidents] = useState(null)
+  const [network, setNetwork] = useState(null)
+  const [networkError, setNetworkError] = useState(null)
   const [config, setConfig] = useState(null)
   const [filters, setFilters] = useState({ environments: [], tags: [] })
 
@@ -229,6 +233,22 @@ export default function EndpointDetail() {
   useEffect(() => {
     if (tab === 'incidents') loadIncidents()
   }, [tab, loadIncidents])
+
+  // Resolved on demand, not with the page: this does a live DNS lookup plus a
+  // reverse lookup per address, and an internal PTR zone that does not answer
+  // costs a timeout. Nobody should pay that to read the overview.
+  const loadNetwork = useCallback(async () => {
+    setNetworkError(null)
+    try {
+      setNetwork(await endpointsApi.network(endpointId))
+    } catch (err) {
+      setNetworkError(err.message)
+    }
+  }, [endpointId])
+
+  useEffect(() => {
+    if (tab === 'network') loadNetwork()
+  }, [tab, loadNetwork])
 
   /** Everything on this screen that can change without the operator acting. */
   const refreshLive = useCallback(async () => {
@@ -854,6 +874,116 @@ export default function EndpointDetail() {
                 </div>
               ))}
             </div>
+          )}
+        </Card>
+      ) : null}
+
+      {/* ---------------------------------------------------- network */}
+      {tab === 'network' ? (
+        <Card
+          title="Where this resolves"
+          actions={
+            <button
+              type="button"
+              className="btn-secondary btn-sm"
+              onClick={loadNetwork}
+            >
+              <RefreshCw size={14} /> Resolve again
+            </button>
+          }
+        >
+          {networkError ? (
+            <ErrorState message={networkError} onRetry={loadNetwork} />
+          ) : !network ? (
+            <LoadingBlock rows={3} />
+          ) : network.error ? (
+            <EmptyState
+              icon={Network}
+              title="The name did not resolve"
+              description={network.error}
+            />
+          ) : (
+            <>
+              <div className="mb-3 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+                <span>
+                  <span className="font-mono text-slate-700 dark:text-slate-200">
+                    {network.hostname}:{network.port}
+                  </span>
+                  {network.is_ip_literal ? ' — an address, so nothing to resolve' : null}
+                </span>
+                {network.resolution_ms != null && !network.is_ip_literal ? (
+                  <span>resolved in {formatMs(network.resolution_ms)}</span>
+                ) : null}
+                <span>
+                  {network.addresses.length} address
+                  {network.addresses.length === 1 ? '' : 'es'}
+                </span>
+              </div>
+
+              <div className="table-wrap">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Address</th>
+                      <th>Family</th>
+                      <th>Reachability</th>
+                      <th>Reverse DNS</th>
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {network.addresses.map((row) => (
+                      <tr key={row.address}>
+                        <td className="font-mono">{row.address}</td>
+                        <td className="text-slate-500">{row.family}</td>
+                        <td>
+                          <span
+                            className={clsx(
+                              'badge',
+                              row.scope === 'public'
+                                ? 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                                : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
+                            )}
+                          >
+                            {row.scope}
+                          </span>
+                        </td>
+                        <td className="font-mono text-xs text-slate-500">
+                          {row.reverse_dns || <span className="text-slate-400">no PTR record</span>}
+                        </td>
+                        <td className="text-right">
+                          {row.in_use ? (
+                            <span className="badge bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300">
+                              last checked
+                            </span>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* A name that resolves somewhere new since the last check is
+                  the explanation for a whole class of confusing failures. */}
+              {network.last_checked_address &&
+              !network.addresses.some((row) => row.in_use) ? (
+                <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                  The last check connected to{' '}
+                  <span className="font-mono">{network.last_checked_address}</span>, which
+                  this name no longer resolves to. DNS has changed since{' '}
+                  {formatRelative(network.last_checked_at)}.
+                </p>
+              ) : null}
+
+              <p className="mt-3 text-xs text-slate-400">
+                Resolved just now through this server's resolver, and reverse
+                lookups are best-effort — an internal zone often has no PTR
+                record. No geolocation: a private address has no region, and
+                finding one for a public address would mean sending your
+                infrastructure's addresses to a third party.
+              </p>
+            </>
           )}
         </Card>
       ) : null}

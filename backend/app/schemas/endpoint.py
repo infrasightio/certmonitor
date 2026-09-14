@@ -489,6 +489,36 @@ class BulkEndpointAction(BaseModel):
         return self
 
 
+class ResolvedAddress(BaseModel):
+    address: str
+    family: str
+    # public | private | loopback | link-local | multicast | reserved
+    scope: str
+    is_global: bool = False
+    reverse_dns: str | None = None
+    # True for the address the most recent check actually connected to.
+    in_use: bool = False
+
+
+class EndpointNetwork(BaseModel):
+    """What this endpoint's hostname resolves to right now.
+
+    Resolved on request rather than stored: DNS is the thing most likely to
+    have changed since the last check, and a cached answer would be the one
+    reading an operator cannot trust.
+    """
+
+    hostname: str
+    port: int
+    is_ip_literal: bool = False
+    resolution_ms: float | None = None
+    error: str | None = None
+    addresses: list[ResolvedAddress] = Field(default_factory=list)
+    # Straight from the last recorded check, for comparison against the above.
+    last_checked_address: str | None = None
+    last_checked_at: datetime | None = None
+
+
 class EndpointStatusSummary(BaseModel):
     """Status counts for the endpoints page header.
 

@@ -26,6 +26,7 @@ from app.models.diagnosis import Diagnosis
 from app.models.endpoint import Endpoint, Environment, Tag
 from app.models.incident import Incident
 from app.models.monitoring import MonitoringResult, SslCertificate
+from app.monitoring import network
 from app.monitoring.validators import UrlValidationError
 from app.schemas.common import BulkActionResult, Message, Page
 from app.schemas.dashboard import EndpointStatsResponse, TimeSeriesPoint, WindowStats
@@ -34,6 +35,7 @@ from app.schemas.endpoint import (
     EndpointCreate,
     EndpointFilterOptions,
     EndpointListItem,
+    EndpointNetwork,
     EndpointRead,
     EndpointStatusSummary,
     EndpointStatusUpdate,
@@ -827,6 +829,41 @@ async def endpoint_stats(
         },
         series=[TimeSeriesPoint.model_validate(point) for point in series],
         bucket_seconds=bucket_seconds,
+    )
+
+
+@router.get(
+    "/{endpoint_id}/network",
+    response_model=EndpointNetwork,
+    summary="What this endpoint's hostname resolves to",
+)
+async def endpoint_network(
+    endpoint_id: uuid.UUID, session: DbSession, _user: ReadEndpoints
+) -> EndpointNetwork:
+    """Every address behind the name, with reverse DNS and routability.
+
+    Resolved live. DNS is the thing most likely to have moved since the last
+    check, so a stored answer would be the one an operator cannot trust.
+    """
+    endpoint = await _load_endpoint(session, endpoint_id)
+
+    last = (
+        await session.execute(
+            select(MonitoringResult.resolved_ip, MonitoringResult.checked_at)
+            .where(MonitoringResult.endpoint_id == endpoint.id)
+            .order_by(MonitoringResult.checked_at.desc())
+            .limit(1)
+        )
+    ).first()
+    last_address = last[0] if last else None
+
+    detail = await network.inspect_host(
+        endpoint.hostname, endpoint.port, in_use=last_address
+    )
+    return EndpointNetwork(
+        **detail,
+        last_checked_address=last_address,
+        last_checked_at=last[1] if last else None,
     )
 
 

@@ -342,7 +342,7 @@ class TestOwnerAndHost:
             json={
                 **BASE,
                 "owner": "platform@example.com",
-                "owner_name": "Rishabh Gupta",
+                "owner_name": "Name",
                 "master_node_ip": "10.0.1.4 (prod-master-1)",
             },
             headers=admin_headers,
@@ -353,7 +353,7 @@ class TestOwnerAndHost:
         # The address is kept - it is how you contact them - but the name is
         # what a screen can show instead.
         assert body["owner"] == "platform@example.com"
-        assert body["owner_name"] == "Rishabh Gupta"
+        assert body["owner_name"] == "Name"
         assert body["master_node_ip"] == "10.0.1.4 (prod-master-1)"
 
     async def test_they_can_be_edited(self, client, admin_headers):

@@ -280,6 +280,7 @@ export const endpointsApi = {
   stats: (id, window) =>
     api.get(`/endpoints/${id}/stats`, { params: { window } }).then((r) => r.data),
   ssl: (id) => api.get(`/endpoints/${id}/ssl`).then((r) => r.data),
+  network: (id) => api.get(`/endpoints/${id}/network`).then((r) => r.data),
   sslHistory: (id) => api.get(`/endpoints/${id}/ssl/history`).then((r) => r.data),
   bulk: (payload) => api.post('/endpoints/bulk', payload).then((r) => r.data),
 }
