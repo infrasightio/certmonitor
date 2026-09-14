@@ -17,6 +17,7 @@ import clsx from 'clsx'
 
 import DiagnosticsPanel from '../components/DiagnosticsPanel'
 import EndpointForm from '../components/EndpointForm'
+import PauseDialog from '../components/PauseDialog'
 import LiveIndicator from '../components/LiveIndicator'
 import {
   ChartFrame,
@@ -109,6 +110,8 @@ export default function EndpointDetail() {
   const [formOpen, setFormOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [pauseOpen, setPauseOpen] = useState(false)
+  const [pausing, setPausing] = useState(false)
 
   const [diagnosing, setDiagnosing] = useState(false)
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false)
@@ -265,7 +268,13 @@ export default function EndpointDetail() {
   // endpoint underneath an open edit form or a diagnosis report would swap the
   // data those were rendered from.
   const { refreshing, lastRefreshedAt } = useAutoRefresh(refreshLive, {
-    paused: checking || diagnosing || formOpen || confirmDelete || diagnosticsOpen,
+    paused:
+      checking ||
+      diagnosing ||
+      formOpen ||
+      confirmDelete ||
+      diagnosticsOpen ||
+      pauseOpen,
   })
 
   // ------------------------------------------------------------- actions
@@ -300,16 +309,36 @@ export default function EndpointDetail() {
     }
   }
 
-  const toggleMonitoring = async () => {
+  // Resuming is a one-click action; pausing goes through the dialog, because
+  // it needs a reason.
+  const resumeMonitoring = async () => {
     try {
       await endpointsApi.setMonitoring(endpointId, {
-        is_paused: !endpoint.is_paused,
+        is_paused: false,
         monitoring_enabled: true,
       })
-      toast.success(endpoint.is_paused ? 'Monitoring resumed.' : 'Monitoring paused.')
+      toast.success('Monitoring resumed.')
       loadEndpoint()
     } catch (err) {
       toast.error(err.message)
+    }
+  }
+
+  const pauseMonitoring = async (reason) => {
+    setPausing(true)
+    try {
+      await endpointsApi.setMonitoring(endpointId, {
+        is_paused: true,
+        monitoring_enabled: true,
+        pause_reason: reason,
+      })
+      toast.success('Monitoring paused.')
+      setPauseOpen(false)
+      loadEndpoint()
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setPausing(false)
     }
   }
 
@@ -398,7 +427,13 @@ export default function EndpointDetail() {
             ) : null}
             {canWrite ? (
               <>
-                <button type="button" className="btn-secondary" onClick={toggleMonitoring}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() =>
+                    endpoint.is_paused ? resumeMonitoring() : setPauseOpen(true)
+                  }
+                >
                   {endpoint.is_paused ? <Play size={15} /> : <Pause size={15} />}
                   {endpoint.is_paused ? 'Resume' : 'Pause'}
                 </button>
@@ -1268,6 +1303,14 @@ export default function EndpointDetail() {
         title="Delete this endpoint?"
         confirmLabel="Delete endpoint"
         message={`'${endpoint.name}' and all of its monitoring history, certificates and incidents will be permanently deleted.`}
+      />
+
+      <PauseDialog
+        open={pauseOpen}
+        onClose={() => setPauseOpen(false)}
+        onConfirm={pauseMonitoring}
+        busy={pausing}
+        title={`Pause monitoring for '${endpoint.name}'`}
       />
     </>
   )

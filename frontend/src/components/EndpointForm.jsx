@@ -34,6 +34,7 @@ const EMPTY = {
   application: '',
   monitoring_enabled: true,
   is_paused: false,
+  pause_reason: '',
   interval_seconds: '',
   timeout_seconds: '',
   expected_status_codes: '',
@@ -117,6 +118,7 @@ export default function EndpointForm({ open, onClose, onSaved, endpoint, filters
         expected_status_codes: endpoint.expected_status_codes ?? '',
         expected_body_substring: endpoint.expected_body_substring ?? '',
         description: endpoint.description ?? '',
+        pause_reason: endpoint.pause_reason ?? '',
         owner: endpoint.owner ?? '',
         owner_name: endpoint.owner_name ?? '',
         master_node_ip: endpoint.master_node_ip ?? '',
@@ -197,6 +199,7 @@ export default function EndpointForm({ open, onClose, onSaved, endpoint, filters
       application: form.application || null,
       monitoring_enabled: form.monitoring_enabled,
       is_paused: form.is_paused,
+      pause_reason: form.is_paused ? form.pause_reason.trim() : null,
       follow_redirects: form.follow_redirects,
       verify_ssl: form.verify_ssl,
       ssl_monitoring_enabled: form.ssl_monitoring_enabled,
@@ -237,6 +240,9 @@ export default function EndpointForm({ open, onClose, onSaved, endpoint, filters
     const next = {}
     if (!form.name.trim()) next.name = 'A name is required.'
     if (!form.url.trim()) next.url = 'A URL or hostname is required.'
+    if (form.is_paused && !form.pause_reason.trim()) {
+      next.pause_reason = 'Say why monitoring is paused.'
+    }
     if (form.custom_headers.trim()) {
       try {
         const parsed = JSON.parse(form.custom_headers)
@@ -525,7 +531,7 @@ export default function EndpointForm({ open, onClose, onSaved, endpoint, filters
                   >
                     <input
                       type="checkbox"
-                      className="h-3.5 w-3.5 shrink-0 rounded border-slate-300"
+                      className="shrink-0"
                       checked={form.dependency_ids.includes(candidate.id)}
                       onChange={() =>
                         setForm((current) => ({
@@ -621,6 +627,25 @@ export default function EndpointForm({ open, onClose, onSaved, endpoint, filters
             description="Temporarily suspend checks, for example during a planned migration."
           />
         </div>
+
+        {/* A paused endpoint reports nothing, so an unexplained one is
+            indistinguishable from an outage nobody noticed. */}
+        {form.is_paused ? (
+          <Field
+            label="Pause reason"
+            required
+            error={errors.pause_reason}
+            hint="Shown wherever this endpoint appears as paused."
+          >
+            <input
+              className="input"
+              value={form.pause_reason}
+              onChange={setInput('pause_reason')}
+              maxLength={255}
+              placeholder="Planned maintenance"
+            />
+          </Field>
+        ) : null}
 
         {/* ------------------------------------------------ TLS section */}
         <Section

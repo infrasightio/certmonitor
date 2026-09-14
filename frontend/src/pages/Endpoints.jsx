@@ -13,6 +13,7 @@ import {
 
 import EndpointForm from '../components/EndpointForm'
 import LiveIndicator from '../components/LiveIndicator'
+import PauseDialog from '../components/PauseDialog'
 import {
   ActionMenu,
   Clamp,
@@ -77,6 +78,9 @@ export default function Endpoints() {
   const [editing, setEditing] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [deleting, setDeleting] = useState(false)
+  // Either a single endpoint, or the string 'selection' for the bulk action.
+  const [pauseTarget, setPauseTarget] = useState(null)
+  const [pausing, setPausing] = useState(false)
   const [checkingId, setCheckingId] = useState(null)
   const [selected, setSelected] = useState(() => new Set())
 
@@ -158,7 +162,7 @@ export default function Endpoints() {
   // underneath the selection.
   const { lastRefreshedAt } = useAutoRefresh(refreshAll, {
     interval: SLOW_INTERVAL,
-    paused: selected.size > 0 || formOpen,
+    paused: selected.size > 0 || formOpen || Boolean(pauseTarget),
   })
 
   // Any filter change invalidates the current page number.
@@ -209,8 +213,10 @@ export default function Endpoints() {
       await endpointsApi.setMonitoring(endpoint.id, changes)
       toast.success(`${endpoint.name} updated.`)
       load({ silent: true })
+      return true
     } catch (err) {
       toast.error(err.message)
+      return false
     }
   }
 
@@ -239,8 +245,29 @@ export default function Endpoints() {
       )
       setSelected(new Set())
       load({ silent: true })
+      return true
     } catch (err) {
       toast.error(err.message)
+      return false
+    }
+  }
+
+  /** One handler for both entry points: a row's menu and the bulk bar. */
+  const confirmPause = async (reason) => {
+    setPausing(true)
+    try {
+      const ok =
+        pauseTarget === 'selection'
+          ? await bulk('pause', { pause_reason: reason })
+          : await setMonitoring(pauseTarget, {
+              is_paused: true,
+              monitoring_enabled: true,
+              pause_reason: reason,
+            })
+      // Left open on failure, so the typed reason is not lost with the toast.
+      if (ok) setPauseTarget(null)
+    } finally {
+      setPausing(false)
     }
   }
 
@@ -440,7 +467,11 @@ export default function Endpoints() {
             <button type="button" className="btn-secondary btn-sm" onClick={() => bulk('resume')}>
               <Play size={13} /> Resume
             </button>
-            <button type="button" className="btn-secondary btn-sm" onClick={() => bulk('pause')}>
+            <button
+              type="button"
+              className="btn-secondary btn-sm"
+              onClick={() => setPauseTarget('selection')}
+            >
               <Pause size={13} /> Pause
             </button>
             {canDelete ? (
@@ -748,10 +779,14 @@ export default function Endpoints() {
                                     role="menuitem"
                                     onClick={() => {
                                       close()
-                                      setMonitoring(endpoint, {
-                                        is_paused: !endpoint.is_paused,
-                                        monitoring_enabled: true,
-                                      })
+                                      if (endpoint.is_paused) {
+                                        setMonitoring(endpoint, {
+                                          is_paused: false,
+                                          monitoring_enabled: true,
+                                        })
+                                      } else {
+                                        setPauseTarget(endpoint)
+                                      }
                                     }}
                                   >
                                     {endpoint.is_paused ? 'Resume monitoring' : 'Pause monitoring'}
@@ -814,6 +849,18 @@ export default function Endpoints() {
           confirmDelete
             ? `'${confirmDelete.name}' and all of its monitoring history, certificates and incidents will be permanently deleted. The audit log entry remains.`
             : ''
+        }
+      />
+
+      <PauseDialog
+        open={Boolean(pauseTarget)}
+        onClose={() => setPauseTarget(null)}
+        onConfirm={confirmPause}
+        busy={pausing}
+        title={
+          pauseTarget === 'selection'
+            ? `Pause monitoring for ${selected.size} endpoint(s)`
+            : `Pause monitoring for '${pauseTarget?.name}'`
         }
       />
     </>

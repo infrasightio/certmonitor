@@ -96,6 +96,7 @@ class RcaRead(RcaListItem):
     can_edit: bool = False
     can_assign: bool = False
     can_complete: bool = False
+    can_reopen: bool = False
 
     incident: dict[str, Any] | None = None
     comments: list[IncidentCommentRead] = Field(default_factory=list)
@@ -161,6 +162,32 @@ class RcaUpdate(BaseModel):
 
 class NotRequiredRequest(BaseModel):
     reason: str | None = Field(default=None, max_length=2000)
+
+
+class RcaReopen(BaseModel):
+    """Why a closed analysis is being opened again, and who now owns it.
+
+    The reason is optional but lands on the timeline when given - the next
+    reader's question about a reopened RCA is always what was wrong with it.
+    The owner fields are optional too: omitted, the RCA keeps whoever it had.
+    """
+
+    reason: str | None = Field(default=None, max_length=500)
+
+    owner_type: str | None = None
+    owner_user_id: uuid.UUID | None = None
+    owner_team: str | None = Field(default=None, max_length=64)
+    due_in_days: int | None = Field(default=None, ge=0, le=365)
+
+    @field_validator("owner_type")
+    @classmethod
+    def _valid_owner_type(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip().lower()
+        if value not in {o.value for o in RcaOwnerType}:
+            raise ValueError("owner_type must be 'individual' or 'team'")
+        return value
 
 
 class RcaDraft(BaseModel):

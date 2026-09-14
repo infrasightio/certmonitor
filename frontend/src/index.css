@@ -18,6 +18,12 @@
  */
 @layer base {
   :root {
+    /* The theme is ours to choose, not the OS's. Without this the browser
+       paints its own widgets - checkboxes, scrollbars, select menus - in the
+       OS scheme, so a user on a dark desktop got black checkboxes sitting on
+       our white tables. */
+    color-scheme: light;
+
     --surface: 255 255 255;
     --surface-raised: 255 255 255;
     /* Page ground: a touch of blue in the grey, dark enough that white cards
@@ -30,6 +36,8 @@
   }
 
   .dark {
+    color-scheme: dark;
+
     --surface: 15 23 42;
     --surface-raised: 30 41 59;
     --surface-sunken: 2 6 23;
@@ -58,6 +66,22 @@
   /* Tabular numerals stop metric columns from jittering as values change. */
   .tnum {
     font-variant-numeric: tabular-nums;
+  }
+
+  /* One checkbox, everywhere. Checkboxes appear in bulk-select columns, alert
+     rules, import previews and preventive actions - each had grown its own
+     size and border, so the same control looked different on every screen.
+     `accent-color` paints the checked state in the brand blue and lets the
+     browser handle the tick, which stays crisp at any zoom. */
+  input[type='checkbox'],
+  input[type='radio'] {
+    @apply h-4 w-4 shrink-0 cursor-pointer border-slate-300 dark:border-slate-600;
+    accent-color: theme('colors.brand.600');
+  }
+
+  input[type='checkbox']:disabled,
+  input[type='radio']:disabled {
+    @apply cursor-not-allowed opacity-60;
   }
 }
 

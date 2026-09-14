@@ -5,6 +5,10 @@ Viewing follows ``incident:read``; requesting, assigning and completing follow
 ``incident:write`` **or** ownership of the RCA itself. That last clause is what
 lets an RCA be assigned to a viewer, or to a team a viewer belongs to, and have
 them actually able to complete it.
+
+Reopening a completed RCA is the one exception: administrators only. Undoing a
+sign-off is a different act from doing the work, and anyone who could edit an
+RCA being able to un-sign it would leave the completed state meaning nothing.
 """
 
 from __future__ import annotations
@@ -17,6 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, select
 
 from app.api.deps import (
+    AdminUser,
     DbSession,
     Pagination,
     RcaEnabled,
@@ -43,6 +48,7 @@ from app.schemas.rca import (
     RcaListItem,
     RcaOptions,
     RcaRead,
+    RcaReopen,
     RcaRequest,
     RcaUpdate,
     to_list_item,
@@ -88,13 +94,17 @@ async def _load_incident(session, incident_id: int) -> Incident:
 def _permissions(rca: Rca, user: User) -> dict[str, bool]:
     editable = rca_service.can_edit(rca, user)
     return {
-        "can_edit": editable and rca.status != RcaStatus.COMPLETED.value,
+        # Both closed states lock the form. Not-required used to report
+        # can_edit, so the UI offered a form whose every save the service then
+        # refused - reopening is the way back in for either.
+        "can_edit": editable and rca.status not in rca_service.REOPENABLE_STATUSES,
         "can_assign": rca_service.can_assign(user),
         "can_complete": (
             editable
             and rca.status
             in (RcaStatus.PENDING.value, RcaStatus.IN_PROGRESS.value)
         ),
+        "can_reopen": rca_service.can_reopen(rca, user),
     }
 
 
@@ -656,6 +666,83 @@ async def generate_rca_draft(
     incident = await _load_incident(session, rca.incident_id)
     draft = await rca_service.generate_draft(session, rca, incident)
     return RcaDraft.model_validate(draft)
+
+
+@router.post(
+    "/rca/{rca_id}/reopen",
+    dependencies=[RcaEnabled],
+    response_model=RcaRead,
+    summary="Reopen a completed RCA (administrators only)",
+)
+async def reopen_rca(
+    rca_id: int,
+    user: AdminUser,
+    request: Request,
+    session: DbSession,
+    payload: RcaReopen | None = None,
+) -> RcaRead:
+    """Put a closed RCA back into progress, and optionally hand it to someone.
+
+    Administrator-only, and deliberately narrower than editing: completing an
+    RCA is a sign-off, so letting everyone who can edit it also un-sign it
+    would make the completed state meaningless. Applies to both closed states -
+    completed, and marked not required.
+
+    Reassignment is folded in rather than left as a second call, because they
+    are one decision: the work was closed wrongly and somebody has to redo it.
+    The close being undone is written to the timeline first, so the record
+    still shows it was signed off once and by whom.
+    """
+    rca = await _load_rca(session, rca_id)
+
+    owner_user = None
+    if payload and payload.owner_user_id:
+        owner_user = (
+            await session.execute(select(User).where(User.id == payload.owner_user_id))
+        ).scalars().first()
+        if owner_user is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Owner not found."
+            )
+
+    try:
+        await rca_service.reopen(
+            session,
+            rca,
+            user=user,
+            reason=payload.reason if payload else None,
+            owner_type=payload.owner_type if payload else None,
+            owner_user=owner_user,
+            owner_team=payload.owner_team if payload else None,
+            due_in_days=payload.due_in_days if payload else None,
+        )
+    except RcaError as exc:
+        raise _bad(exc) from exc
+
+    await audit_service.record(
+        session,
+        action=AuditAction.RCA_REOPENED.value,
+        user=user, resource_type="rca", resource_id=rca.id,
+        resource_name=f"RCA {rca.id}",
+        details={
+            "incident_id": rca.incident_id,
+            "reason": payload.reason if payload else None,
+            "owner": rca.owner_label,
+        },
+        request=request,
+    )
+    await session.commit()
+
+    reloaded = await _load_rca(session, rca_id)
+    incident = (
+        await session.execute(select(Incident).where(Incident.id == reloaded.incident_id))
+    ).scalars().unique().first()
+    return to_read(
+        reloaded,
+        permissions=_permissions(reloaded, user),
+        incident=_incident_summary(incident),
+        comments=await rca_service.comments_for(session, reloaded.incident_id),
+    )
 
 
 @router.post(

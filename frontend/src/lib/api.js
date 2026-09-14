@@ -370,6 +370,10 @@ export const rcaApi = {
   update: (id, payload) => api.put(`/rca/${id}`, payload).then((r) => r.data),
   assign: (id, payload) => api.post(`/rca/${id}/assign`, payload).then((r) => r.data),
   complete: (id) => api.post(`/rca/${id}/complete`).then((r) => r.data),
+  // Administrators only; the server enforces it, this just calls it. The
+  // payload carries an optional reason and an optional reassignment.
+  reopen: (id, payload) =>
+    api.post(`/rca/${id}/reopen`, payload || {}).then((r) => r.data),
   // Assembled from stored records, so it can take a moment on a busy incident.
   draft: (id) =>
     api.post(`/rca/${id}/draft`, null, { timeout: 60000 }).then((r) => r.data),

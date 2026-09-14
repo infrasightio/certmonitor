@@ -321,7 +321,7 @@ export default function ChangeForm({ open, onClose, onSaved, change, environment
                   >
                     <input
                       type="checkbox"
-                      className="h-3.5 w-3.5 shrink-0 rounded border-slate-300"
+                      className="shrink-0"
                       checked={selected.includes(endpoint.id)}
                       onChange={() =>
                         setSelected((current) =>

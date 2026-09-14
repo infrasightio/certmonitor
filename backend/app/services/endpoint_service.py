@@ -355,6 +355,11 @@ async def create_endpoint(
         master_node_ip=_trim(payload.get("master_node_ip"), 128),
         monitoring_enabled=_as_bool(payload.get("monitoring_enabled"), True),
         is_paused=_as_bool(payload.get("is_paused"), False),
+        pause_reason=(
+            _trim(payload.get("pause_reason"), 255)
+            if _as_bool(payload.get("is_paused"), False)
+            else None
+        ),
         interval_seconds=interval,
         timeout_seconds=timeout,
         expected_status_codes=normalise_status_codes(
@@ -491,6 +496,15 @@ async def update_endpoint(
     if not endpoint.is_paused:
         endpoint.pause_reason = None
         endpoint.paused_by_change_id = None
+    elif payload.get("pause_reason"):
+        reason = _trim(str(payload["pause_reason"]), 255)
+        if reason != endpoint.pause_reason:
+            # The reason was actually rewritten, so this is now a manual pause
+            # and the deployment that paused it no longer owns the resume.
+            # Only on a real change: saving the form without touching the
+            # reason must not quietly orphan an in-flight deployment.
+            endpoint.pause_reason = reason
+            endpoint.paused_by_change_id = None
 
     if "ssl_monitoring_enabled" in payload and payload["ssl_monitoring_enabled"] is not None:
         endpoint.ssl_monitoring_enabled = (

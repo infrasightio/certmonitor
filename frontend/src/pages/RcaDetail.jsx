@@ -9,6 +9,7 @@ import {
   MessageSquare,
   Paperclip,
   Plus,
+  RotateCcw,
   Save,
   UserCog,
   X,
@@ -38,6 +39,29 @@ import { useAutoRefresh } from '../hooks/useAutoRefresh'
 import { formatDateTime } from '../lib/format'
 import { useToast } from '../hooks/useToast'
 
+/** One section of a finished RCA, set as readable text rather than a field.
+ *
+ * `whitespace-pre-wrap` keeps the paragraph breaks the author typed, and the
+ * measure is capped near 80 characters - a root cause that runs the full width
+ * of a wide monitor is written once and read never.
+ */
+function Prose({ label, value }) {
+  return (
+    <div>
+      <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        {label}
+      </h3>
+      {value ? (
+        <p className="max-w-[80ch] whitespace-pre-wrap text-sm leading-relaxed text-slate-800 dark:text-slate-100">
+          {value}
+        </p>
+      ) : (
+        <p className="text-sm italic text-slate-400">Not recorded.</p>
+      )}
+    </div>
+  )
+}
+
 export default function RcaDetail() {
   const { rcaId } = useParams()
   const toast = useToast()
@@ -64,6 +88,16 @@ export default function RcaDetail() {
   const [draftNotice, setDraftNotice] = useState(null)
   const [assignOpen, setAssignOpen] = useState(false)
   const [confirmComplete, setConfirmComplete] = useState(false)
+  const [reopenOpen, setReopenOpen] = useState(false)
+  const [reopen, setReopen] = useState({
+    reason: '',
+    // 'keep' leaves the current owner alone; the RCA usually goes back to
+    // whoever closed it badly, but not always.
+    owner_type: 'keep',
+    owner_user_id: '',
+    owner_team: '',
+    due_in_days: '',
+  })
   const [users, setUsers] = useState([])
   const [teams, setTeams] = useState([])
   const [assign, setAssign] = useState({
@@ -101,7 +135,7 @@ export default function RcaDetail() {
   // than not seeing a new comment for a minute, so `dirty` hard-stops it -
   // and the manual Refresh stays available for when the user is ready.
   const { refreshing, lastRefreshedAt } = useAutoRefresh(load, {
-    paused: dirty || busy || assignOpen || confirmComplete,
+    paused: dirty || busy || assignOpen || confirmComplete || reopenOpen,
   })
 
   useEffect(() => {
@@ -251,6 +285,26 @@ export default function RcaDetail() {
                 <CheckCircle2 size={15} /> Complete RCA
               </button>
             ) : null}
+            {rca.can_reopen ? (
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => {
+                  setReopen({
+                    reason: '',
+                    owner_type: 'keep',
+                    owner_user_id: '',
+                    owner_team: rca.owner_team || '',
+                    due_in_days: '',
+                  })
+                  setReopenOpen(true)
+                }}
+                disabled={busy}
+                title="Administrators only"
+              >
+                <RotateCcw size={15} /> Reopen
+              </button>
+            ) : null}
           </>
         }
       />
@@ -298,64 +352,75 @@ export default function RcaDetail() {
         {/* --------------------------------------------------- form */}
         <div className="space-y-4 xl:col-span-2">
           <Card title="Root cause analysis">
-            <div className="space-y-3">
-              <Field
-                label="Root cause"
-                required
-                hint="What actually caused it. Required to complete."
-              >
-                <textarea
-                  className="input"
-                  rows={5}
-                  value={form.root_cause}
-                  onChange={set('root_cause')}
-                  disabled={readOnly}
-                  placeholder="Describe what went wrong and why."
+            {readOnly ? (
+              // Finished work is read, not edited. Scrolling a paragraph inside
+              // a disabled textarea to find out what broke is the wrong shape
+              // for the job, so a locked RCA renders as a document.
+              <div className="space-y-5">
+                <Prose label="Root cause" value={form.root_cause} />
+                <Prose
+                  label="Category"
+                  value={CATEGORY_LABELS[form.root_cause_category] || null}
                 />
-              </Field>
-
-              <Field label="Category" hint="Optional — it is what makes reporting possible.">
-                <select
-                  className="input"
-                  value={form.root_cause_category}
-                  onChange={set('root_cause_category')}
-                  disabled={readOnly}
+                <Prose label="Impact" value={form.impact} />
+                <Prose label="Resolution" value={form.resolution} />
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <Field
+                  label="Root cause"
+                  required
+                  hint="What actually caused it. Required to complete."
                 >
-                  <option value="">Not categorised</option>
-                  {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
+                  <textarea
+                    className="input"
+                    rows={5}
+                    value={form.root_cause}
+                    onChange={set('root_cause')}
+                    placeholder="Describe what went wrong and why."
+                  />
+                </Field>
 
-              <Field label="Impact">
-                <textarea
-                  className="input"
-                  rows={4}
-                  value={form.impact}
-                  onChange={set('impact')}
-                  disabled={readOnly}
-                  placeholder="Who and what was affected, and for how long."
-                />
-              </Field>
+                <Field label="Category" hint="Optional — it is what makes reporting possible.">
+                  <select
+                    className="input"
+                    value={form.root_cause_category}
+                    onChange={set('root_cause_category')}
+                  >
+                    <option value="">Not categorised</option>
+                    {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
 
-              <Field
-                label="Resolution"
-                required
-                hint="What fixed it. Required to complete."
-              >
-                <textarea
-                  className="input"
-                  rows={4}
-                  value={form.resolution}
-                  onChange={set('resolution')}
-                  disabled={readOnly}
-                  placeholder="What was done to restore service."
-                />
-              </Field>
-            </div>
+                <Field label="Impact">
+                  <textarea
+                    className="input"
+                    rows={4}
+                    value={form.impact}
+                    onChange={set('impact')}
+                    placeholder="Who and what was affected, and for how long."
+                  />
+                </Field>
+
+                <Field
+                  label="Resolution"
+                  required
+                  hint="What fixed it. Required to complete."
+                >
+                  <textarea
+                    className="input"
+                    rows={4}
+                    value={form.resolution}
+                    onChange={set('resolution')}
+                    placeholder="What was done to restore service."
+                  />
+                </Field>
+              </div>
+            )}
           </Card>
 
           {/* ----------------------------------- preventive actions */}
@@ -871,6 +936,156 @@ export default function RcaDetail() {
           if (result) setConfirmComplete(false)
         }}
       />
+
+      <Modal
+        open={reopenOpen}
+        onClose={() => setReopenOpen(false)}
+        title={`Reopen RCA-${rca.id}?`}
+        size="sm"
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setReopenOpen(false)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={
+                busy ||
+                (reopen.owner_type === 'team' && !reopen.owner_team.trim()) ||
+                (reopen.owner_type === 'individual' && !reopen.owner_user_id)
+              }
+              onClick={async () => {
+                const reassigning = reopen.owner_type !== 'keep'
+                const result = await run(
+                  () =>
+                    rcaApi.reopen(rca.id, {
+                      reason: reopen.reason.trim() || null,
+                      owner_type: reassigning ? reopen.owner_type : null,
+                      owner_user_id: reopen.owner_user_id || null,
+                      owner_team: reopen.owner_team || null,
+                      due_in_days:
+                        reassigning && reopen.due_in_days
+                          ? Number(reopen.due_in_days)
+                          : null,
+                    }),
+                  'RCA reopened.',
+                )
+                if (result) setReopenOpen(false)
+              }}
+            >
+              {busy ? <Spinner size={15} /> : <RotateCcw size={15} />} Reopen
+            </button>
+          </>
+        }
+      >
+        <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">
+          This moves the RCA back to <strong>In progress</strong> so it can be
+          edited and completed again. The previous sign-off is kept on the
+          timeline, not erased.
+        </p>
+
+        <Field
+          label="Reason"
+          hint="Optional, but it goes on the timeline — the next reader will want to know what was wrong with the closed version."
+        >
+          <textarea
+            className="input"
+            rows={3}
+            maxLength={500}
+            value={reopen.reason}
+            onChange={(event) =>
+              setReopen((current) => ({ ...current, reason: event.target.value }))
+            }
+            placeholder="Root cause was wrong — the deployment at 14:02 was unrelated."
+          />
+        </Field>
+
+        <Field
+          label="Hand it to"
+          hint="Reopening without an owner leaves it nobody's problem, which is usually how it got closed badly."
+        >
+          <select
+            className="input"
+            value={reopen.owner_type}
+            onChange={(event) =>
+              setReopen((current) => ({ ...current, owner_type: event.target.value }))
+            }
+          >
+            <option value="keep">
+              Keep the current owner{rca.owner_label ? ` (${rca.owner_label})` : ''}
+            </option>
+            <option value="team">A team</option>
+            <option value="individual">An individual</option>
+          </select>
+        </Field>
+
+        {reopen.owner_type === 'team' ? (
+          <Field label="Team" required>
+            <input
+              className="input"
+              value={reopen.owner_team}
+              onChange={(event) =>
+                setReopen((current) => ({ ...current, owner_team: event.target.value }))
+              }
+              list="rca-reopen-teams"
+              placeholder="DevOps"
+              maxLength={64}
+            />
+            {/* Its own list: the assign dialog's is unmounted while closed. */}
+            <datalist id="rca-reopen-teams">
+              {teams.map((team) => (
+                <option key={team} value={team} />
+              ))}
+            </datalist>
+          </Field>
+        ) : null}
+
+        {reopen.owner_type === 'individual' ? (
+          <Field label="User" required>
+            <select
+              className="input"
+              value={reopen.owner_user_id}
+              onChange={(event) =>
+                setReopen((current) => ({
+                  ...current,
+                  owner_user_id: event.target.value,
+                }))
+              }
+            >
+              <option value="">Select a user…</option>
+              {users.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.username}
+                  {item.team ? ` (${item.team})` : ''}
+                </option>
+              ))}
+            </select>
+          </Field>
+        ) : null}
+
+        {reopen.owner_type !== 'keep' ? (
+          <Field label="Due in (days)" hint="Optional. Without one, an RCA is never overdue.">
+            <input
+              type="number"
+              min={0}
+              max={365}
+              className="input"
+              value={reopen.due_in_days}
+              onChange={(event) =>
+                setReopen((current) => ({
+                  ...current,
+                  due_in_days: event.target.value,
+                }))
+              }
+            />
+          </Field>
+        ) : null}
+      </Modal>
     </>
   )
 }

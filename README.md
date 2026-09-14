@@ -774,6 +774,20 @@ UNKNOWN ──► UP ──► DOWN ──► RECOVERED ──► UP
   closes an open incident.
 - A paused endpoint is `PAUSED`, so it is read as neither healthy nor failing.
 
+### Pausing always asks why
+
+Pausing is rejected without a reason — from the endpoint's own Pause button,
+from the row menu, from a bulk pause of fifty at once, and from the edit form's
+Paused toggle. A deployment supplies its own (`Deployment CHG-YYYY-NNNN`).
+
+This is a deliberate piece of friction. A paused endpoint produces nothing —
+no checks, no incidents, no alerts, no uptime — so six weeks later an
+unexplained `Paused` row is indistinguishable from an outage nobody noticed,
+and the honest answer to "why is this off?" becomes "nobody remembers". The
+reason appears on the Endpoints table, the detail page and the paused-endpoints
+report, and is cleared on resume so a running endpoint never claims to be
+paused for something.
+
 ### Availability
 
 Two different notions of "down" are reported on purpose:
@@ -1246,6 +1260,8 @@ Completing an RCA changes nothing about the incident.
 ```
 Incident:  Detected → Investigating → Resolved → Closed
 RCA:       Not requested → Pending → In progress → Completed
+                                          ▲            │
+                                          └── reopen ──┘  (admin only)
 ```
 
 Those run independently, so **Incident: CLOSED, RCA: PENDING** is a normal,
@@ -1273,6 +1289,29 @@ No team table, no membership screen, no extra role.
 That third row is the point: a **viewer** assigned an RCA — personally, or via
 their team label — can complete it. Assigning work to someone who then cannot
 do it is the failure mode this avoids.
+
+### Reopening is admin-only
+
+A closed RCA is locked — for the owner, for anyone with `incident:write`, for
+everyone. Both closed states count: **Completed**, and **Not required**. Only an
+**administrator** sees **Reopen**, which puts it back to *In progress*.
+
+Doing the work and undoing the sign-off are different acts. If whoever could
+edit an RCA could also quietly un-sign it, "Completed" would mean nothing.
+"Not required" is reopenable for the same reason in reverse: *nobody needs to
+look at this* is a judgement, and judgements are revisable once the same
+incident happens a third time.
+
+**Reopening also reassigns.** The dialog offers a team or an individual
+alongside the reason, because they are one decision — the work was closed
+wrongly and somebody has to redo it. Reopening without naming an owner leaves
+an RCA that is open, unowned and therefore nobody's problem, which is usually
+how it came to be closed badly. Keeping the existing owner stays the default.
+
+The reopen is recorded rather than erased: a timeline entry keeps who closed it
+and when, the reassignment, and the optional reason; an `rca_reopened` audit
+record names the administrator. A reopened RCA is never mistaken for one that
+was simply never finished.
 
 ### The form is deliberately small
 

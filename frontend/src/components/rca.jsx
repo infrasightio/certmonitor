@@ -102,6 +102,7 @@ export function timelineTone(kind) {
     return 'bg-indigo-500'
   }
   if (kind === 'diagnosis') return 'bg-blue-500'
+  if (kind === 'reopened') return 'bg-amber-500'
   if (kind === 'comment') return 'bg-slate-400'
   return 'bg-slate-400'
 }

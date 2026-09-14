@@ -206,6 +206,7 @@ class EndpointBase(BaseModel):
 
     monitoring_enabled: bool = True
     is_paused: bool = False
+    pause_reason: str | None = Field(default=None, max_length=255)
     interval_seconds: int | None = Field(default=None, ge=10, le=86400)
     timeout_seconds: int | None = Field(default=None, ge=1, le=120)
 
@@ -311,6 +312,7 @@ class EndpointUpdate(BaseModel):
     dependency_ids: list[uuid.UUID] | None = Field(default=None, max_length=20)
     monitoring_enabled: bool | None = None
     is_paused: bool | None = None
+    pause_reason: str | None = Field(default=None, max_length=255)
     interval_seconds: int | None = Field(default=None, ge=10, le=86400)
     timeout_seconds: int | None = Field(default=None, ge=1, le=120)
     expected_status_codes: str | None = Field(default=None, max_length=128)
@@ -382,8 +384,9 @@ class EndpointListItem(ORMModel):
 
     monitoring_enabled: bool
     is_paused: bool
-    # Populated when a deployment paused this endpoint, e.g.
-    # "Deployment CHG-2026-0001" - so a paused row explains itself.
+    # Why it is paused: the reason the operator gave, or one a deployment set
+    # for itself, e.g. "Deployment CHG-2026-0001" - so a paused row explains
+    # itself instead of just going quiet.
     pause_reason: str | None = None
     paused_by_change_id: int | None = None
     # Set when the configured path 404'd and a different one answered, e.g.
@@ -447,6 +450,7 @@ class EndpointRead(EndpointListItem):
 class EndpointStatusUpdate(BaseModel):
     monitoring_enabled: bool | None = None
     is_paused: bool | None = None
+    pause_reason: str | None = Field(default=None, max_length=255)
 
     @model_validator(mode="after")
     def _at_least_one(self) -> "EndpointStatusUpdate":
@@ -456,6 +460,19 @@ class EndpointStatusUpdate(BaseModel):
             )
         return self
 
+    @model_validator(mode="after")
+    def _a_pause_needs_a_reason(self) -> "EndpointStatusUpdate":
+        """Silence on a dashboard has to be explainable.
+
+        A paused endpoint reports nothing, so an unexplained one is
+        indistinguishable from an outage nobody noticed. Required only when
+        pausing - resuming and enabling carry no reason.
+        """
+        pausing = self.is_paused is True or self.monitoring_enabled is False
+        if pausing and not (self.pause_reason or "").strip():
+            raise ValueError("a reason is required when pausing monitoring")
+        return self
+
 
 class BulkEndpointAction(BaseModel):
     endpoint_ids: list[uuid.UUID] = Field(min_length=1, max_length=500)
@@ -463,6 +480,7 @@ class BulkEndpointAction(BaseModel):
         description="One of: enable, disable, pause, resume, delete, check, tag, untag"
     )
     tags: list[str] | None = None
+    pause_reason: str | None = Field(default=None, max_length=255)
 
     @field_validator("action")
     @classmethod
@@ -486,6 +504,19 @@ class BulkEndpointAction(BaseModel):
     def _tags_required(self) -> "BulkEndpointAction":
         if self.action in ("tag", "untag") and not self.tags:
             raise ValueError(f"the '{self.action}' action requires tags")
+        return self
+
+    @model_validator(mode="after")
+    def _a_pause_needs_a_reason(self) -> "BulkEndpointAction":
+        """Same rule as the single-endpoint toggle, applied in bulk.
+
+        Pausing fifty endpoints at once is exactly the case where somebody
+        later needs to know why they all went quiet.
+        """
+        if self.action in ("pause", "disable") and not (
+            self.pause_reason or ""
+        ).strip():
+            raise ValueError(f"the '{self.action}' action requires a reason")
         return self
 
 

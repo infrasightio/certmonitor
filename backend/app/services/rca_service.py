@@ -347,6 +347,106 @@ async def complete(session: AsyncSession, rca: Rca, *, user: User) -> Rca:
     return rca
 
 
+# The two closed states. Both are decisions an administrator may need to take
+# back: "we analysed this" and "this needs no analysis" are equally reversible
+# once someone knows more than the person who closed it did.
+REOPENABLE_STATUSES = (RcaStatus.COMPLETED.value, RcaStatus.NOT_REQUIRED.value)
+
+
+def can_reopen(rca: Rca, user: User) -> bool:
+    """Only an administrator, and only something already closed.
+
+    Deliberately narrower than can_edit. Completing an RCA is a sign-off, and
+    anyone who could edit it being able to quietly un-sign it would make the
+    completed state worth nothing.
+    """
+    return (
+        user.role_name == RoleName.ADMIN.value
+        and rca.status in REOPENABLE_STATUSES
+    )
+
+
+async def reopen(
+    session: AsyncSession,
+    rca: Rca,
+    *,
+    user: User,
+    reason: str | None = None,
+    owner_type: str | None = None,
+    owner_user: User | None = None,
+    owner_team: str | None = None,
+    due_in_days: int | None = None,
+) -> Rca:
+    """Put a closed RCA back into progress, optionally in someone's hands.
+
+    Reassignment is part of reopening rather than a second step, because the
+    two are the same decision: the work was closed wrongly, and somebody has
+    to redo it. Reopening without saying who leaves an RCA that is open,
+    unowned, and therefore nobody's problem - which is how it got closed badly
+    the first time.
+
+    The previous close is recorded on the timeline before it is cleared, so
+    the record still shows it was signed off once and by whom. Losing that
+    would make a reopened RCA indistinguishable from one never finished.
+    """
+    if rca.status not in REOPENABLE_STATUSES:
+        raise RcaError("only a completed or not-required RCA can be reopened")
+
+    was_not_required = rca.status == RcaStatus.NOT_REQUIRED.value
+    completed_by = rca.completed_by
+    completed_at = rca.completed_at
+    previous_owner = rca.owner_label
+
+    if owner_type:
+        _apply_owner(
+            rca, owner_type=owner_type, owner_user=owner_user, owner_team=owner_team
+        )
+    if due_in_days is not None:
+        rca.due_at = _now() + timedelta(days=int(due_in_days)) if due_in_days else None
+
+    entries = list(rca.timeline or [])
+    detail = f"Reopened by {user.username}"
+    if was_not_required:
+        detail += ", after being marked not required"
+    elif completed_by:
+        stamp = completed_at.strftime("%Y-%m-%d %H:%M") if completed_at else "earlier"
+        detail += f", after {completed_by} completed it on {stamp}"
+    if owner_type and rca.owner_label:
+        detail += f". Reassigned to {rca.owner_label}"
+        if previous_owner and previous_owner != rca.owner_label:
+            detail += f" (was {previous_owner})"
+    if reason:
+        detail += f" - {reason.strip()[:400]}"
+    entries.append(
+        {
+            "at": _now().isoformat(),
+            "kind": "reopened",
+            "detail": detail[:1000],
+            "source": "manual",
+        }
+    )
+    rca.timeline = entries[-100:]
+
+    rca.status = RcaStatus.IN_PROGRESS.value
+    rca.started_at = rca.started_at or _now()
+    rca.completed_at = None
+    rca.completed_by = None
+    # A not-required RCA was never requested, so it carries no decision to keep.
+    rca.not_required_reason = None
+    await session.flush()
+
+    logger.info(
+        "rca_reopened",
+        rca_id=rca.id,
+        incident_id=rca.incident_id,
+        by=user.username,
+        previously_completed_by=completed_by,
+        was_not_required=was_not_required,
+        owner=rca.owner_label,
+    )
+    return rca
+
+
 async def mark_not_required(
     session: AsyncSession,
     incident: Incident,

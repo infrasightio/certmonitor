@@ -478,6 +478,48 @@ class TestDeploymentPausesMonitoring:
         assert response.json()["pause_reason"] is None
         assert response.json()["paused_by_change_id"] is None
 
+    async def test_editing_a_deployment_paused_endpoint_keeps_the_deployment(
+        self, client, admin_headers, staging_id, session
+    ):
+        """Saving the edit form must not orphan an in-flight deployment.
+
+        The form shows the deployment's own pause reason, and echoes it back on
+        save. Treating that echo as a manual pause would clear the link and
+        leave the endpoint paused forever once the change completes.
+        """
+        endpoint = await _endpoint(client, admin_headers)
+        change_id = await self._approved(
+            client, admin_headers, staging_id, [endpoint["id"]]
+        )
+        await client.post(
+            f"/api/changes/{change_id}/start-deployment", headers=admin_headers
+        )
+
+        paused = await client.get(
+            f"/api/endpoints/{endpoint['id']}", headers=admin_headers
+        )
+        reason = paused.json()["pause_reason"]
+
+        saved = await client.put(
+            f"/api/endpoints/{endpoint['id']}",
+            json={"description": "edited", "is_paused": True, "pause_reason": reason},
+            headers=admin_headers,
+        )
+        assert saved.json()["paused_by_change_id"] == change_id
+
+        finish = await client.post(
+            f"/api/changes/{change_id}/complete", json={}, headers=admin_headers
+        )
+        assert len(finish.json()["monitoring_resumed"]) == 1
+
+        session.expire_all()
+        row = (
+            await session.execute(
+                select(Endpoint).where(Endpoint.id == endpoint["id"])
+            )
+        ).scalar_one()
+        assert row.is_paused is False
+
 
 class TestDeploymentGuards:
     async def test_an_unapproved_change_cannot_be_deployed(

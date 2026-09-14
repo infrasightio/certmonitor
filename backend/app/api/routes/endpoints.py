@@ -389,12 +389,20 @@ async def set_monitoring_state(
         endpoint.next_check_at = datetime.now(timezone.utc)
         endpoint.lease_expires_at = None
         endpoint.leased_by = None
+        # The reason described a pause that is over. Leaving it behind makes a
+        # running endpoint claim it is paused for something.
+        endpoint.pause_reason = None
+        endpoint.paused_by_change_id = None
     else:
         endpoint.next_check_at = None
         # A paused endpoint keeps its last known status but must not be read
         # as healthy or failing while nothing is checking it.
         endpoint.current_status = EndpointStatus.PAUSED.value
         endpoint.consecutive_failures = 0
+        endpoint.pause_reason = (payload.pause_reason or "").strip()[:255]
+        # A manual pause takes ownership from whatever paused it before, so
+        # completing that deployment no longer resumes it behind the operator.
+        endpoint.paused_by_change_id = None
 
     endpoint.updated_by_id = user.id
     await audit_service.record(
@@ -414,7 +422,8 @@ async def set_monitoring_state(
                     "from": before["is_paused"],
                     "to": endpoint.is_paused,
                 },
-            }
+            },
+            "pause_reason": endpoint.pause_reason,
         },
         request=request,
     )
@@ -985,6 +994,7 @@ async def bulk_action(
 
     succeeded = 0
     now = datetime.now(timezone.utc)
+    reason = (payload.pause_reason or "").strip()[:255] or None
     tags = (
         await endpoint_service.resolve_tags(session, payload.tags)
         if payload.action in ("tag", "untag")
@@ -997,18 +1007,26 @@ async def bulk_action(
                 endpoint.monitoring_enabled = True
                 endpoint.is_paused = False
                 endpoint.next_check_at = now
+                endpoint.pause_reason = None
+                endpoint.paused_by_change_id = None
             elif payload.action == "disable":
                 endpoint.monitoring_enabled = False
                 endpoint.next_check_at = None
                 endpoint.current_status = EndpointStatus.PAUSED.value
+                endpoint.pause_reason = reason
+                endpoint.paused_by_change_id = None
             elif payload.action == "pause":
                 endpoint.is_paused = True
                 endpoint.next_check_at = None
                 endpoint.current_status = EndpointStatus.PAUSED.value
+                endpoint.pause_reason = reason
+                endpoint.paused_by_change_id = None
             elif payload.action == "resume":
                 endpoint.is_paused = False
                 endpoint.monitoring_enabled = True
                 endpoint.next_check_at = now
+                endpoint.pause_reason = None
+                endpoint.paused_by_change_id = None
             elif payload.action == "delete":
                 await session.delete(endpoint)
             elif payload.action == "check":

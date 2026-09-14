@@ -479,12 +479,13 @@ class TestUpdateAndDelete:
 
         paused = await client.patch(
             f"/api/endpoints/{endpoint_id}/monitoring",
-            json={"is_paused": True},
+            json={"is_paused": True, "pause_reason": "Planned maintenance"},
             headers=admin_headers,
         )
         assert paused.json()["is_paused"] is True
         assert paused.json()["current_status"] == "paused"
         assert paused.json()["next_check_at"] is None
+        assert paused.json()["pause_reason"] == "Planned maintenance"
 
         resumed = await client.patch(
             f"/api/endpoints/{endpoint_id}/monitoring",
@@ -493,6 +494,27 @@ class TestUpdateAndDelete:
         )
         assert resumed.json()["is_paused"] is False
         assert resumed.json()["next_check_at"] is not None
+        # The reason described a pause that is over.
+        assert resumed.json()["pause_reason"] is None
+
+    async def test_pausing_without_a_reason_is_rejected(self, client, admin_headers):
+        """A paused endpoint reports nothing, so it has to explain itself."""
+        created = await client.post("/api/endpoints", json=BASE, headers=admin_headers)
+        endpoint_id = created.json()["id"]
+
+        response = await client.patch(
+            f"/api/endpoints/{endpoint_id}/monitoring",
+            json={"is_paused": True},
+            headers=admin_headers,
+        )
+        assert response.status_code == 422
+
+        blank = await client.patch(
+            f"/api/endpoints/{endpoint_id}/monitoring",
+            json={"is_paused": True, "pause_reason": "   "},
+            headers=admin_headers,
+        )
+        assert blank.status_code == 422
 
     async def test_delete_removes_the_endpoint(self, client, admin_headers):
         created = await client.post("/api/endpoints", json=BASE, headers=admin_headers)
@@ -545,7 +567,11 @@ class TestBulkActions:
 
         response = await client.post(
             "/api/endpoints/bulk",
-            json={"endpoint_ids": ids, "action": "pause"},
+            json={
+                "endpoint_ids": ids,
+                "action": "pause",
+                "pause_reason": "Datacentre migration",
+            },
             headers=admin_headers,
         )
         assert response.status_code == 200
@@ -555,6 +581,23 @@ class TestBulkActions:
             "/api/endpoints", params={"status": "paused"}, headers=admin_headers
         )
         assert listing.json()["meta"]["total"] == 3
+        assert all(
+            row["pause_reason"] == "Datacentre migration"
+            for row in listing.json()["items"]
+        )
+
+    async def test_pausing_many_without_a_reason_is_rejected(
+        self, client, admin_headers
+    ):
+        """Pausing fifty at once is exactly when somebody later asks why."""
+        created = await client.post("/api/endpoints", json=BASE, headers=admin_headers)
+
+        response = await client.post(
+            "/api/endpoints/bulk",
+            json={"endpoint_ids": [created.json()["id"]], "action": "pause"},
+            headers=admin_headers,
+        )
+        assert response.status_code == 422
 
     async def test_tagging_many(self, client, admin_headers):
         created = await client.post("/api/endpoints", json=BASE, headers=admin_headers)

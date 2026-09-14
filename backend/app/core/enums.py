@@ -205,6 +205,7 @@ class AuditAction(StrEnum):
     RCA_ASSIGNED = "rca_assigned"
     RCA_UPDATED = "rca_updated"
     RCA_COMPLETED = "rca_completed"
+    RCA_REOPENED = "rca_reopened"
     RCA_NOT_REQUIRED = "rca_not_required"
     CHANGE_CREATED = "change_created"
     CHANGE_UPDATED = "change_updated"

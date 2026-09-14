@@ -325,7 +325,7 @@ export default function ImportExport() {
                       <label className="flex items-center gap-1.5 text-xs">
                         <input
                           type="checkbox"
-                          className="h-3.5 w-3.5 rounded border-slate-300"
+                          className="shrink-0"
                           checked={showOnlyProblems}
                           onChange={(event) => setShowOnlyProblems(event.target.checked)}
                         />
@@ -365,7 +365,7 @@ export default function ImportExport() {
                               <td>
                                 <input
                                   type="checkbox"
-                                  className="h-3.5 w-3.5 rounded border-slate-300"
+                                  className="shrink-0"
                                   disabled={!row.valid}
                                   checked={skipRows.has(row.row_number)}
                                   aria-label={`Skip row ${row.row_number}`}

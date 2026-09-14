@@ -240,6 +240,179 @@ class TestCompletionRules:
         assert response.status_code == 422
 
 
+class TestReopen:
+    """Completing an RCA is a sign-off, so undoing it is admin-only.
+
+    The rule worth protecting: being able to edit an RCA is not the same as
+    being able to un-sign it. An owner who could quietly reopen their own
+    completed RCA would make the completed state mean nothing.
+    """
+
+    async def _completed_rca(self, client, headers, incident, *, team=None):
+        created = await client.post(
+            f"/api/incidents/{incident.id}/rca",
+            json=(
+                {"owner_type": "team", "owner_team": team} if team else {}
+            ),
+            headers=headers,
+        )
+        rca_id = created.json()["id"]
+        await client.put(
+            f"/api/rca/{rca_id}",
+            json={"root_cause": "Connection pool exhausted", "resolution": "Restarted"},
+            headers=headers,
+        )
+        done = await client.post(f"/api/rca/{rca_id}/complete", headers=headers)
+        assert done.json()["status"] == "completed"
+        return rca_id
+
+    async def test_an_admin_can_reopen_and_edit_again(
+        self, client, admin_headers, incident
+    ):
+        rca_id = await self._completed_rca(client, admin_headers, incident)
+
+        response = await client.post(
+            f"/api/rca/{rca_id}/reopen",
+            json={"reason": "Root cause was wrong"},
+            headers=admin_headers,
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "in_progress"
+        assert body["completed_at"] is None
+        assert body["completed_by"] is None
+        # The whole point of reopening: it is editable again.
+        assert body["can_edit"] is True
+        assert body["can_reopen"] is False
+
+    async def test_the_original_sign_off_survives_on_the_timeline(
+        self, client, admin_headers, incident
+    ):
+        """Otherwise a reopened RCA looks like one that was never finished."""
+        rca_id = await self._completed_rca(client, admin_headers, incident)
+
+        response = await client.post(
+            f"/api/rca/{rca_id}/reopen",
+            json={"reason": "Deployment at 14:02 was unrelated"},
+            headers=admin_headers,
+        )
+        entry = [
+            row for row in response.json()["timeline"] if row["kind"] == "reopened"
+        ]
+        assert len(entry) == 1
+        detail = entry[0]["detail"]
+        assert "Reopened by admin" in detail
+        assert "admin completed it" in detail
+        assert "Deployment at 14:02 was unrelated" in detail
+
+    async def test_an_owner_who_can_edit_still_cannot_reopen(
+        self, client, admin_headers, team_headers, incident
+    ):
+        rca_id = await self._completed_rca(
+            client, admin_headers, incident, team="DevOps"
+        )
+
+        detail = await client.get(f"/api/rca/{rca_id}", headers=team_headers)
+        assert detail.json()["can_reopen"] is False
+
+        response = await client.post(
+            f"/api/rca/{rca_id}/reopen", json={}, headers=team_headers
+        )
+        assert response.status_code == 403
+
+    async def test_an_open_rca_cannot_be_reopened(
+        self, client, admin_headers, incident
+    ):
+        created = await client.post(
+            f"/api/incidents/{incident.id}/rca", json={}, headers=admin_headers
+        )
+        rca_id = created.json()["id"]
+        assert created.json()["can_reopen"] is False
+
+        response = await client.post(
+            f"/api/rca/{rca_id}/reopen", json={}, headers=admin_headers
+        )
+        assert response.status_code == 400
+
+    async def test_a_not_required_decision_can_be_taken_back(
+        self, client, admin_headers, incident
+    ):
+        """The other closed state. 'Nobody needs to look at this' is a
+        judgement, and judgements are revisable once someone knows more."""
+        declined = await client.post(
+            f"/api/incidents/{incident.id}/rca/not-required",
+            json={"reason": "Looked like a blip."},
+            headers=admin_headers,
+        )
+        rca_id = declined.json()["id"]
+        assert declined.json()["status"] == "not_required"
+        assert declined.json()["can_reopen"] is True
+        # A closed RCA is not an editable one - reopening is the way back in.
+        assert declined.json()["can_edit"] is False
+
+        response = await client.post(
+            f"/api/rca/{rca_id}/reopen",
+            json={"reason": "It recurred twice since."},
+            headers=admin_headers,
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "in_progress"
+        assert body["can_edit"] is True
+        assert body["not_required_reason"] is None
+
+    async def test_reopening_can_hand_the_work_to_a_team(
+        self, client, admin_headers, team_headers, incident
+    ):
+        """The two halves of one decision: this was closed wrongly, and
+        somebody has to redo it."""
+        rca_id = await self._completed_rca(client, admin_headers, incident)
+
+        response = await client.post(
+            f"/api/rca/{rca_id}/reopen",
+            json={
+                "reason": "Wrong root cause",
+                "owner_type": "team",
+                "owner_team": "DevOps",
+                "due_in_days": 7,
+            },
+            headers=admin_headers,
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["owner_team"] == "DevOps"
+        assert body["due_at"] is not None
+        assert "Reassigned to" in "".join(
+            row["detail"] for row in body["timeline"] if row["kind"] == "reopened"
+        )
+
+        # The point of the reassignment: the new owner can now do the work,
+        # and they are only a viewer.
+        detail = await client.get(f"/api/rca/{rca_id}", headers=team_headers)
+        assert detail.json()["can_edit"] is True
+
+    async def test_reopening_without_an_owner_keeps_the_one_it_had(
+        self, client, admin_headers, incident
+    ):
+        rca_id = await self._completed_rca(
+            client, admin_headers, incident, team="Platform"
+        )
+
+        response = await client.post(
+            f"/api/rca/{rca_id}/reopen", json={}, headers=admin_headers
+        )
+        assert response.json()["owner_team"] == "Platform"
+
+    async def test_a_reason_is_optional(self, client, admin_headers, incident):
+        rca_id = await self._completed_rca(client, admin_headers, incident)
+
+        response = await client.post(
+            f"/api/rca/{rca_id}/reopen", json={}, headers=admin_headers
+        )
+        assert response.status_code == 200
+        assert response.json()["status"] == "in_progress"
+
+
 class TestOwnership:
     """Team ownership without a team table, a membership screen or a new role."""
 
