@@ -42,7 +42,7 @@ from app.core.logging import get_logger
 from app.models.change import Change, ChangeActivity, ChangeComment, change_endpoints
 from app.models.endpoint import Endpoint, Environment
 from app.models.user import User
-from app.services import endpoint_service, monitoring_service
+from app.services import capture_service, endpoint_service, monitoring_service
 
 logger = get_logger(__name__)
 
@@ -598,6 +598,21 @@ async def _run_health_check(
             except Exception as exc:  # pragma: no cover - defensive
                 logger.warning(
                     "post_deploy_record_failed",
+                    endpoint=endpoint.name, error=str(exc),
+                )
+            # A post-deployment check is a real check, so it replaces the
+            # capture too - which makes this the most useful capture there is:
+            # what the endpoint returned the moment the deployment finished.
+            try:
+                await capture_service.record_check(
+                    session,
+                    endpoint.id,
+                    outcome,
+                    captured_by=f"deploy:{change.reference}",
+                )
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.warning(
+                    "post_deploy_capture_failed",
                     endpoint=endpoint.name, error=str(exc),
                 )
             endpoint.next_check_at = monitoring_service.next_check_for(

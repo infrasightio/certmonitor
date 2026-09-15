@@ -107,6 +107,27 @@ class Settings(BaseSettings):
 
     FAILURE_THRESHOLD: int = 3
     RESPONSE_TIME_THRESHOLD_MS: int = 2000
+
+    # ------------------------------------------------------------ captures
+    # The response body of the last pass and the last failure is always kept -
+    # it costs a few kilobytes per endpoint and no dependency. The SCREENSHOT
+    # below is the part that needs Chromium, is opt-in per endpoint, and can
+    # be switched off fleet-wide here without rebuilding the image.
+    SCREENSHOT_ENABLED: bool = True
+    # Separate from WORKER_CONCURRENCY on purpose. Fifty concurrent HTTP checks
+    # is nothing; fifty concurrent Chromium pages is several gigabytes.
+    SCREENSHOT_CONCURRENCY: int = 2
+    SCREENSHOT_TIMEOUT_SECONDS: int = 20
+    SCREENSHOT_WIDTH: int = 1280
+    SCREENSHOT_HEIGHT: int = 800
+    # JPEG, not PNG. A screenshot of a web page is a photograph of a rendering,
+    # not a diagram - and at PNG's fidelity two captures per endpoint is
+    # megabytes rather than kilobytes.
+    SCREENSHOT_QUALITY: int = 70
+    SCREENSHOT_USER_AGENT: str = (
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36 InfraSight/1.0"
+    )
     ALERT_COOLDOWN_MINUTES: int = 30
     DATA_RETENTION_DAYS: int = 90
 

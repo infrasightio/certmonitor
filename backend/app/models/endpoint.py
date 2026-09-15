@@ -216,6 +216,14 @@ class Endpoint(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     ssl_monitoring_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True
     )
+    # Render a screenshot alongside the response body on the next pass and the
+    # next failure. Off by default and deliberately per-endpoint: rendering
+    # costs a browser page, and most monitored endpoints are JSON health
+    # routes where a picture of the text says less than the text. The body
+    # capture is unconditional and costs nothing - see EndpointCapture.
+    screenshot_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
     request_body: Mapped[str | None] = mapped_column(Text)
 
     # Non-sensitive headers only. Authentication material lives encrypted in
@@ -286,6 +294,14 @@ class Endpoint(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         passive_deletes=True,
     )
     incidents: Mapped[list["Incident"]] = relationship(  # noqa: F821
+        back_populates="endpoint",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    # At most two rows - the last pass and the last failure. Not loaded with
+    # the endpoint: the capture panel asks for them, nothing else needs them,
+    # and one of the columns is a screenshot.
+    captures: Mapped[list["EndpointCapture"]] = relationship(  # noqa: F821
         back_populates="endpoint",
         cascade="all, delete-orphan",
         passive_deletes=True,

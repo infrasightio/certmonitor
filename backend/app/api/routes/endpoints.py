@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from sqlalchemy import func, select
 
 from app.api.deps import (
@@ -20,7 +20,12 @@ from app.api.deps import (
     parse_uuid_list,
     split_csv_param,
 )
-from app.core.enums import AuditAction, DiagnosisFocus, EndpointStatus
+from app.core.enums import (
+    AuditAction,
+    CaptureOutcome,
+    DiagnosisFocus,
+    EndpointStatus,
+)
 from app.core.logging import get_logger
 from app.models.diagnosis import Diagnosis
 from app.models.endpoint import Endpoint, Environment, Tag
@@ -32,6 +37,7 @@ from app.schemas.common import BulkActionResult, Message, Page
 from app.schemas.dashboard import EndpointStatsResponse, TimeSeriesPoint, WindowStats
 from app.schemas.endpoint import (
     BulkEndpointAction,
+    EndpointCaptureRead,
     EndpointCreate,
     EndpointFilterOptions,
     EndpointListItem,
@@ -55,6 +61,7 @@ from app.schemas.monitoring import (
 )
 from app.services import (
     audit_service,
+    capture_service,
     diagnostics_service,
     endpoint_service,
     monitoring_service,
@@ -549,6 +556,13 @@ async def check_endpoint_now(
         )
         incident_closed = (
             recorded.incident_closed.id if recorded.incident_closed else None
+        )
+        # A manual check is a real check, so it replaces the capture too -
+        # otherwise "Check now" would show a fresh result beside a stale body.
+        # No screenshot: rendering belongs to the worker, which has the
+        # browser and the concurrency budget for it.
+        await capture_service.record_check(
+            session, endpoint.id, outcome, captured_by=user.username
         )
         # Keep the endpoint on its normal cadence rather than counting the
         # manual check as the scheduled one - "normal" being the resolved
@@ -1106,4 +1120,90 @@ async def bulk_action(
         succeeded=succeeded,
         failed=len(errors),
         errors=errors,
+    )
+
+
+# ---------------------------------------------------------------- captures
+@router.get(
+    "/{endpoint_id}/captures",
+    response_model=list[EndpointCaptureRead],
+    summary="The last successful and last failed response",
+)
+async def list_captures(
+    endpoint_id: uuid.UUID, session: DbSession, _user: ReadEndpoints
+) -> list[EndpointCaptureRead]:
+    """What this endpoint returned, the last time it passed and the last time
+    it failed.
+
+    At most two records, newest first - the pair is the whole history that is
+    kept. Each carries the response body; a screenshot is present only for
+    endpoints that opted in, and is fetched separately so it can be cached.
+    """
+    await _load_endpoint(session, endpoint_id)
+    rows = await capture_service.list_for_endpoint(session, endpoint_id)
+    return [EndpointCaptureRead(**capture_service.to_dict(row)) for row in rows]
+
+
+@router.get(
+    "/{endpoint_id}/captures/{outcome}/image",
+    summary="The screenshot from one capture",
+    responses={
+        200: {"content": {"image/jpeg": {}}, "description": "The rendered page"},
+        304: {"description": "The browser's cached copy is still current"},
+        404: {"description": "No screenshot for that outcome"},
+    },
+)
+async def get_capture_image(
+    endpoint_id: uuid.UUID,
+    outcome: str,
+    request: Request,
+    session: DbSession,
+    _user: ReadEndpoints,
+) -> Response:
+    """Serve the screenshot bytes.
+
+    Its own route rather than base64 in the JSON, so the browser can cache it:
+    the ETag is a hash of the image, and a screenshot only changes when the
+    capture it belongs to is replaced. `immutable` is deliberately NOT set -
+    the URL stays the same while the bytes behind it change.
+    """
+    if outcome not in {o.value for o in CaptureOutcome}:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Unknown capture outcome."
+        )
+
+    await _load_endpoint(session, endpoint_id)
+    row = await capture_service.get(session, endpoint_id, outcome)
+    if row is None or not row.image_etag:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No screenshot was captured for that outcome.",
+        )
+
+    etag = f'"{row.image_etag}"'
+    # Checked before the image column is loaded, so a browser that already has
+    # this screenshot never causes the bytes to leave the database.
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
+
+    # `image` is a deferred column: this is the one place it is worth loading.
+    await session.refresh(row, ["image"])
+    if not row.image:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No screenshot was captured for that outcome.",
+        )
+
+    return Response(
+        content=row.image,
+        media_type=row.image_type or "image/jpeg",
+        headers={
+            "ETag": etag,
+            # Private: this is a picture of an internal service, and it must
+            # not be held by a shared proxy.
+            "Cache-Control": "private, max-age=60, must-revalidate",
+            "Content-Disposition": (
+                f'inline; filename="capture-{outcome}.jpg"'
+            ),
+        },
     )

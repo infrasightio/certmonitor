@@ -16,7 +16,12 @@ from app.models.diagnosis import Diagnosis
 from app.models.endpoint import Endpoint, Environment, Tag, endpoint_tags
 from app.models.incident import Incident
 from app.models.rca import IncidentComment, Rca
-from app.models.monitoring import MonitoringResult, SslCertificate, WorkerHeartbeat
+from app.models.monitoring import (
+    EndpointCapture,
+    MonitoringResult,
+    SslCertificate,
+    WorkerHeartbeat,
+)
 from app.models.system import AuditLog, SystemSetting
 from app.models.user import Permission, Role, User, role_permissions
 
@@ -29,6 +34,7 @@ __all__ = [
     "ChangeComment",
     "Diagnosis",
     "Endpoint",
+    "EndpointCapture",
     "Environment",
     "Incident",
     "IncidentComment",

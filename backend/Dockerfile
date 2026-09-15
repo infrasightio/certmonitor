@@ -55,6 +55,21 @@ RUN apt-get update \
 
 COPY --from=builder /opt/venv /opt/venv
 
+# Chromium, for the endpoint screenshots. Installed to a shared path rather
+# than the default ~/.cache so the unprivileged runtime user can read it, and
+# installed here rather than in the builder because Playwright pulls the
+# browser AND its shared libraries - which have to land in the runtime image,
+# not be discarded with the build stage.
+#
+# This is the single largest thing in the image (~400 MB). A deployment that
+# does not want screenshots can delete these two layers: app/monitoring/
+# screenshot.py imports Playwright lazily and degrades to a recorded reason,
+# so the worker runs fine without them.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN /opt/venv/bin/playwright install --with-deps chromium \
+ && rm -rf /var/lib/apt/lists/* \
+ && chmod -R a+rX /ms-playwright
+
 WORKDIR /app
 
 # Run as an unprivileged user. Monitoring only needs outbound TCP, so no

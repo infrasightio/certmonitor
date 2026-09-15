@@ -370,6 +370,10 @@ async def create_endpoint(
         verify_ssl=_as_bool(payload.get("verify_ssl"), True),
         ssl_monitoring_enabled=_as_bool(payload.get("ssl_monitoring_enabled"), True)
         and target.protocol == "https",
+        # Only an HTTP check has a page to photograph; a TCP handshake does
+        # not, so the flag is refused rather than stored and quietly ignored.
+        screenshot_enabled=_as_bool(payload.get("screenshot_enabled"), False)
+        and check_type == CheckType.HTTP.value,
         request_body=payload.get("request_body"),
         custom_headers=validate_custom_headers(payload.get("custom_headers")),
         auth_type=auth_type,
@@ -511,6 +515,12 @@ async def update_endpoint(
             bool(payload["ssl_monitoring_enabled"]) and endpoint.protocol == "https"
         )
 
+    if "screenshot_enabled" in payload and payload["screenshot_enabled"] is not None:
+        endpoint.screenshot_enabled = (
+            bool(payload["screenshot_enabled"])
+            and endpoint.check_type == CheckType.HTTP.value
+        )
+
     if "interval_seconds" in payload and payload["interval_seconds"]:
         endpoint.interval_seconds = clamp_interval(payload["interval_seconds"])
     if "timeout_seconds" in payload and payload["timeout_seconds"]:
@@ -630,6 +640,7 @@ def snapshot(endpoint: Endpoint) -> dict[str, Any]:
         "follow_redirects": endpoint.follow_redirects,
         "verify_ssl": endpoint.verify_ssl,
         "ssl_monitoring_enabled": endpoint.ssl_monitoring_enabled,
+        "screenshot_enabled": endpoint.screenshot_enabled,
         "custom_header_names": sorted((endpoint.custom_headers or {}).keys()),
         "auth_type": endpoint.auth_type,
         "auth_username": endpoint.auth_username,

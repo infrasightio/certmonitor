@@ -705,6 +705,53 @@ when they differ, naming which rule is in play.
 A worker that dies mid-batch strands nothing — its leases expire and the
 endpoints become claimable again.
 
+### Last response captures
+
+An incident tells you an endpoint failed. It rarely tells you what it *said*
+when it failed, and by the time anyone looks the endpoint has usually
+recovered. So two responses are kept per endpoint: the last successful one and
+the last failed one.
+
+Two, and only ever two. The table's primary key is `(endpoint_id, outcome)`,
+so a new capture **replaces** the one it supersedes — this is not a retention
+policy that has to be swept, it is the shape of the table. Size is a function
+of how many endpoints exist, not of how often they are checked, which is what
+separates it from `monitoring_results`.
+
+| | kept | cost |
+|---|---|---|
+| Response body | every endpoint, always | ~16 KB max per capture |
+| Screenshot | opt-in per endpoint | ~80–150 KB per capture |
+
+The **body** is free: the probe already streams the response to measure it, so
+the first 64 KB is retained instead of discarded. Only text is stored — a PNG
+or a protobuf would be mojibake, so the metadata records what the type was and
+the body is left empty. A recovery never erases the failure: they are separate
+rows, which is the whole point.
+
+The **screenshot** needs Chromium, so it is opt-in per endpoint and only for
+HTTP checks — there is nothing to photograph about a TCP handshake. It is
+worth turning on for a dashboard or a status page; for a JSON health route the
+captured body says more than a picture of the same JSON. Renders run:
+
+- **after** the check has been committed and its lease released, so a slow
+  page can never delay monitoring;
+- under a semaphore of their own (`SCREENSHOT_CONCURRENCY`, default 2), not
+  the worker's 50 check slots — 50 concurrent Chromium pages is gigabytes;
+- against one long-lived browser process, because launching Chromium costs
+  about a second each time.
+
+A render that arrives after the endpoint has been checked again is **dropped**
+rather than written: it would pair a picture of one response with the record
+of another. A render that fails records why, and the panel says so — an empty
+box reads as the feature being broken rather than the page being
+unrenderable.
+
+Playwright is imported lazily and every failure degrades to a recorded reason,
+so an image built without Chromium still runs: it simply never produces
+screenshots. `SCREENSHOT_ENABLED=false` turns them off fleet-wide without a
+rebuild.
+
 ### Finding the health path
 
 Health endpoints are not standardised. Across one fleet you will find

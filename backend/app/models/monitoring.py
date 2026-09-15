@@ -7,10 +7,12 @@ from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Float,
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     Uuid,
@@ -192,3 +194,87 @@ class WorkerHeartbeat(Base):
     cpu_percent: Mapped[float | None] = mapped_column(Float)
     memory_mb: Mapped[float | None] = mapped_column(Float)
     memory_limit_mb: Mapped[float | None] = mapped_column(Float)
+
+
+class EndpointCapture(Base):
+    """What the endpoint actually returned, the last time it passed and the
+    last time it failed.
+
+    Two rows per endpoint, ever. That is not a retention policy someone has to
+    remember to run - it is the primary key: ``(endpoint_id, outcome)`` with
+    ``outcome`` constrained to 'success' or 'failure', so writing a new capture
+    REPLACES the old one and the table cannot grow with check volume the way
+    ``monitoring_results`` does. Deleting the endpoint takes both rows with it.
+
+    Every capture carries the response body, truncated. The screenshot is
+    optional and opt-in per endpoint (``Endpoint.screenshot_enabled``), because
+    rendering a page costs a browser and most monitored endpoints are JSON
+    health routes where a picture of the text would tell you less than the
+    text does.
+
+    ``image`` is deferred: the detail panel reads the body and the metadata on
+    every page load, and there is no reason to drag a hundred kilobytes of JPEG
+    through that query when only the image route needs it.
+    """
+
+    __tablename__ = "endpoint_captures"
+    __table_args__ = (
+        CheckConstraint(
+            "outcome IN ('success', 'failure')", name="ck_endpoint_captures_outcome"
+        ),
+        Index("ix_endpoint_captures_captured_at", "captured_at"),
+    )
+
+    endpoint_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("endpoints.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    # 'success' or 'failure'. Degraded counts as a success: the endpoint
+    # answered, and what it answered with is what this row is for.
+    outcome: Mapped[str] = mapped_column(String(8), primary_key=True)
+
+    captured_at: Mapped[datetime] = mapped_column(TimestampTZ, nullable=False)
+    captured_by: Mapped[str | None] = mapped_column(String(64))
+
+    # ------------------------------------------- the check that produced it
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    http_status_code: Mapped[int | None] = mapped_column(Integer)
+    failure_reason: Mapped[str | None] = mapped_column(String(32))
+    error_message: Mapped[str | None] = mapped_column(Text)
+    response_time_ms: Mapped[float | None] = mapped_column(Float)
+    final_url: Mapped[str | None] = mapped_column(String(2048))
+
+    # ------------------------------------------------------------- the body
+    # Text, not bytes: it is shown in a panel, searched by eye, and copied out
+    # of the UI. Binary responses are not captured at all - see
+    # capture_service.body_from_outcome.
+    body: Mapped[str | None] = mapped_column(Text)
+    content_type: Mapped[str | None] = mapped_column(String(128))
+    # Length of the FULL response, not of what was kept, so the panel can say
+    # "showing the first 64 KB of 2.1 MB" rather than implying the response was
+    # small.
+    body_bytes: Mapped[int | None] = mapped_column(Integer)
+    body_truncated: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    response_headers: Mapped[dict | None] = mapped_column(JSONType)
+
+    # ------------------------------------------------------ the screenshot
+    image: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True)
+    image_type: Mapped[str | None] = mapped_column(String(32))
+    image_bytes: Mapped[int | None] = mapped_column(Integer)
+    image_width: Mapped[int | None] = mapped_column(Integer)
+    image_height: Mapped[int | None] = mapped_column(Integer)
+    # Cache validator for the image route, so a browser that already has this
+    # screenshot is not sent it again until it is replaced.
+    image_etag: Mapped[str | None] = mapped_column(String(64))
+    # Why there is no image, when one was expected. A render that fails is
+    # worth saying out loud - silently showing nothing looks like the feature
+    # is broken rather than like the page is.
+    image_error: Mapped[str | None] = mapped_column(String(255))
+    image_captured_at: Mapped[datetime | None] = mapped_column(TimestampTZ)
+
+    endpoint: Mapped["Endpoint"] = relationship(  # noqa: F821
+        back_populates="captures"
+    )

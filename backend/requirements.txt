@@ -45,3 +45,10 @@ pytest==8.3.4
 pytest-asyncio==0.25.0
 aiosqlite==0.20.0
 respx==0.22.0
+
+# --- Page captures ---
+# Renders a monitored page to a JPEG for the "last success / last failure"
+# screenshots. Optional at runtime: app/monitoring/screenshot.py imports it
+# lazily and records a reason rather than failing when it or its Chromium is
+# absent, so a slimmed image still runs - it just never produces screenshots.
+playwright==1.49.1

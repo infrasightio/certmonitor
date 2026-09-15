@@ -153,6 +153,13 @@ class CheckOutcome:
 
     resolved_ip: str | None = None
     content_length: int | None = None
+
+    # The first 64 KB of the response, kept so the last pass and the last
+    # failure can be shown back to whoever is looking at the endpoint. Raw
+    # bytes here; decoding and the decision about whether it is even text
+    # belong to capture_service, not to the probe.
+    body_head: bytes | None = None
+    body_truncated: bool = False
     redirect_count: int = 0
     final_url: str | None = None
     redirect_chain: list[dict[str, Any]] = field(default_factory=list)
@@ -420,21 +427,28 @@ async def _run_http_check(target: CheckTarget, outcome: CheckOutcome) -> CheckOu
                 for hop in history
             ]
 
+            # One buffer, two jobs. The body is streamed either way - it has
+            # to be, to measure it - so the first 64 KB is kept rather than
+            # discarded: the substring match reads it, and so does the capture
+            # that lets someone see the actual 502 page after the fact.
+            # Bounded, so a 2 GB response still costs 64 KB of memory here.
             body_bytes = 0
             matched_substring = target.expected_body_substring is None
-            peek = bytearray()
+            head = bytearray()
             async for chunk in response.aiter_bytes():
                 body_bytes += len(chunk)
-                if not matched_substring and len(peek) < _MAX_BODY_PEEK_BYTES:
-                    peek.extend(chunk[: _MAX_BODY_PEEK_BYTES - len(peek)])
+                if len(head) < _MAX_BODY_PEEK_BYTES:
+                    head.extend(chunk[: _MAX_BODY_PEEK_BYTES - len(head)])
                     if (
-                        target.expected_body_substring
+                        not matched_substring
+                        and target.expected_body_substring
                         and target.expected_body_substring.encode("utf-8", "ignore")
-                        in peek
+                        in head
                     ):
                         matched_substring = True
-                        peek.clear()
             outcome.content_length = body_bytes
+            outcome.body_head = bytes(head)
+            outcome.body_truncated = body_bytes > len(head)
         finally:
             await response.aclose()
 

@@ -405,3 +405,15 @@ class RootCauseCategory(StrEnum):
     HUMAN_ERROR = "human_error"
     EXTERNAL_DEPENDENCY = "external_dependency"
     UNKNOWN = "unknown"
+
+
+class CaptureOutcome(StrEnum):
+    """Which of an endpoint's two captures a row is.
+
+    Only two values, ever: the pair IS the storage policy. A degraded check
+    counts as a success - the endpoint answered, and what it answered with is
+    what the capture is for.
+    """
+
+    SUCCESS = "success"
+    FAILURE = "failure"

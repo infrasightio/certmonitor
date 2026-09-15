@@ -37,11 +37,14 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.core.database import SessionFactory, dispose_engine
+from app.core.enums import CheckType
 from app.core.logging import configure_logging, get_logger
 from app.models.endpoint import Endpoint
 from app.models.monitoring import WorkerHeartbeat
+from app.monitoring import screenshot
 from app.services import (
     alert_service,
+    capture_service,
     monitoring_service,
     resource_service,
     retention_service,
@@ -79,6 +82,9 @@ class MonitorWorker:
         self._checks_completed = 0
         self._checks_failed = 0
         self._in_flight = 0
+        # Renders in flight. Held so shutdown can wait for them rather than
+        # leaving a Chromium page open and a capture row half written.
+        self._screenshots: set[asyncio.Task] = set()
 
     # ------------------------------------------------------------ signals
     def install_signal_handlers(self) -> None:
@@ -284,6 +290,7 @@ class MonitorWorker:
                         await session.commit()
                         return
 
+                    outcome = None
                     try:
                         outcome = await monitoring_service.execute_check(
                             endpoint, config
@@ -295,6 +302,24 @@ class MonitorWorker:
                             config=config,
                             checked_by=self.worker_id,
                             is_manual=False,
+                        )
+                        # Replaces this endpoint's previous capture for
+                        # whichever outcome the check had. Two rows per
+                        # endpoint, ever - see capture_service.
+                        #
+                        # Deliberately in the SAME transaction as the result it
+                        # describes: the two commit together or not at all, so
+                        # a capture can never claim to be the body of a check
+                        # that was never recorded. That makes it capable of
+                        # rolling back a good check, which is why
+                        # capture_service sanitises everything it writes rather
+                        # than trusting a guard here - a caught flush error
+                        # would leave the session unusable anyway.
+                        await capture_service.record_check(
+                            session,
+                            endpoint.id,
+                            outcome,
+                            captured_by=self.worker_id,
                         )
                         self._checks_completed += 1
                         if not outcome.is_up:
@@ -315,6 +340,14 @@ class MonitorWorker:
                         endpoint.leased_by = None
 
                     await session.commit()
+
+                    # Only now, with the check committed and the lease
+                    # released. Rendering a page takes seconds; doing it
+                    # inside the transaction above would hold a row lock and a
+                    # connection open for the duration, and a slow page would
+                    # delay the thing the worker actually exists to do.
+                    if outcome is not None and self._wants_screenshot(endpoint):
+                        self._spawn_screenshot(endpoint, outcome)
             except Exception as exc:
                 logger.error(
                     "check_cycle_error",
@@ -325,6 +358,88 @@ class MonitorWorker:
                 await self._release_lease(endpoint_id)
             finally:
                 self._in_flight -= 1
+
+    # --------------------------------------------------------- screenshots
+    def _wants_screenshot(self, endpoint: Endpoint) -> bool:
+        """Is a rendered screenshot both wanted and possible for this endpoint?
+
+        Three gates, cheapest first. The check type matters: there is nothing
+        to photograph about a TCP handshake, and asking Chromium to open a
+        `tcp://` URL would only produce an error to store.
+        """
+        return (
+            settings.SCREENSHOT_ENABLED
+            and endpoint.screenshot_enabled
+            and endpoint.check_type == CheckType.HTTP.value
+        )
+
+    def _spawn_screenshot(self, endpoint: Endpoint, outcome) -> None:
+        """Start a render in the background and keep a handle on it.
+
+        Tracked in a set rather than fired and forgotten, so shutdown can wait
+        for the ones in flight instead of leaving a Chromium page mid-render
+        and a half-written row.
+        """
+        task = asyncio.create_task(
+            self._capture_screenshot(
+                endpoint_id=endpoint.id,
+                name=endpoint.name,
+                # The URL the check actually landed on, which after a redirect
+                # or a discovered health path is not the configured one - and
+                # the capture should show the page that was judged.
+                url=outcome.final_url or endpoint.url,
+                verify_ssl=endpoint.verify_ssl,
+                outcome=capture_service.outcome_for(outcome),
+                checked_at=outcome.checked_at,
+            ),
+            name=f"screenshot:{endpoint.id}",
+        )
+        self._screenshots.add(task)
+        task.add_done_callback(self._screenshots.discard)
+
+    async def _capture_screenshot(
+        self,
+        *,
+        endpoint_id: uuid.UUID,
+        name: str,
+        url: str,
+        verify_ssl: bool,
+        outcome: str,
+        checked_at: datetime,
+    ) -> None:
+        """Render one page and merge it into the capture row it belongs to.
+
+        Swallows everything. A screenshot is an enrichment: nothing about the
+        endpoint's status, its incidents or its alerts depends on one, so no
+        failure here is allowed to surface as a worker error.
+        """
+        try:
+            shot = await screenshot.capture(url, verify_ssl=verify_ssl)
+            async with SessionFactory() as session:
+                attached = await capture_service.attach_screenshot(
+                    session,
+                    endpoint_id,
+                    outcome,
+                    image=shot.image,
+                    width=shot.width,
+                    height=shot.height,
+                    error=shot.error,
+                    captured_at=checked_at,
+                )
+                await session.commit()
+            if attached and shot.ok:
+                logger.debug(
+                    "screenshot_captured",
+                    endpoint=name,
+                    outcome=outcome,
+                    bytes=len(shot.image or b""),
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning(
+                "screenshot_capture_error", endpoint=name, error=str(exc)[:200]
+            )
 
     async def _release_lease(self, endpoint_id: uuid.UUID) -> None:
         """Best-effort lease release after a failed check cycle."""
@@ -503,11 +618,26 @@ class MonitorWorker:
             logger.info(
                 "worker_draining",
                 in_flight=self._in_flight,
+                screenshots_in_flight=len(self._screenshots),
                 checks_completed=self._checks_completed,
             )
             for task in tasks:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
+
+            # Renders get a few seconds to finish rather than being cancelled
+            # outright: one is already most of the way through, and a captured
+            # screenshot is worth more than a couple of seconds of shutdown.
+            if self._screenshots:
+                try:
+                    await asyncio.wait_for(
+                        asyncio.gather(*self._screenshots, return_exceptions=True),
+                        timeout=10,
+                    )
+                except asyncio.TimeoutError:
+                    for task in list(self._screenshots):
+                        task.cancel()
+            await screenshot.shutdown()
 
             # Release anything still leased so a restart picks it up at once
             # rather than after the lease expires, and retire our own heartbeat

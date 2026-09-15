@@ -215,6 +215,9 @@ class EndpointBase(BaseModel):
     follow_redirects: bool = True
     verify_ssl: bool = True
     ssl_monitoring_enabled: bool = True
+    # Opt in to a rendered screenshot beside the captured response body. Off
+    # by default: the body costs nothing, a render costs a browser page.
+    screenshot_enabled: bool = False
     request_body: str | None = Field(default=None, max_length=64_000)
     custom_headers: dict[str, str] | None = None
 
@@ -320,6 +323,7 @@ class EndpointUpdate(BaseModel):
     follow_redirects: bool | None = None
     verify_ssl: bool | None = None
     ssl_monitoring_enabled: bool | None = None
+    screenshot_enabled: bool | None = None
     request_body: str | None = Field(default=None, max_length=64_000)
     custom_headers: dict[str, str] | None = None
     auth_type: str | None = None
@@ -409,6 +413,7 @@ class EndpointListItem(ORMModel):
     consecutive_failures: int = 0
 
     ssl_monitoring_enabled: bool = True
+    screenshot_enabled: bool = False
     ssl_status: str
     ssl_expires_at: datetime | None = None
     ssl_days_remaining: int | None = None
@@ -625,3 +630,44 @@ def endpoint_to_read(
     model.updated_by = updated_by
     model.effective_interval_seconds = effective_interval_seconds
     return model
+
+
+# ------------------------------------------------------------------ captures
+class EndpointCaptureRead(BaseModel):
+    """What the endpoint returned, on its last pass or its last failure.
+
+    The image is NOT in here. It is served by its own route so a browser can
+    cache it by ETag and skip re-downloading a screenshot it already has;
+    inlining a hundred kilobytes of base64 on every detail page load would
+    throw that away. `has_image` says whether that route has anything to give.
+    """
+
+    outcome: str
+    captured_at: datetime
+    captured_by: str | None = None
+
+    status: str
+    http_status_code: int | None = None
+    failure_reason: str | None = None
+    error_message: str | None = None
+    response_time_ms: float | None = None
+    final_url: str | None = None
+
+    body: str | None = None
+    content_type: str | None = None
+    # Length of the FULL response, so the panel can say "the first 16 KB of
+    # 2.1 MB" rather than implying the response was small.
+    body_bytes: int | None = None
+    body_truncated: bool = False
+    response_headers: dict[str, str] | None = None
+
+    has_image: bool = False
+    image_type: str | None = None
+    image_bytes: int | None = None
+    image_width: int | None = None
+    image_height: int | None = None
+    # Why there is no screenshot, when one was expected. Said out loud rather
+    # than shown as an empty box, which reads as the feature being broken
+    # instead of the page being unrenderable.
+    image_error: str | None = None
+    image_captured_at: datetime | None = None

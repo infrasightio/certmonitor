@@ -42,6 +42,7 @@ const EMPTY = {
   follow_redirects: true,
   verify_ssl: true,
   ssl_monitoring_enabled: true,
+  screenshot_enabled: false,
   request_body: '',
   custom_headers: '',
   auth_type: 'none',
@@ -203,6 +204,7 @@ export default function EndpointForm({ open, onClose, onSaved, endpoint, filters
       follow_redirects: form.follow_redirects,
       verify_ssl: form.verify_ssl,
       ssl_monitoring_enabled: form.ssl_monitoring_enabled,
+      screenshot_enabled: form.screenshot_enabled,
       alerts_enabled: form.alerts_enabled,
       expected_status_codes: form.expected_status_codes || null,
       expected_body_substring: form.expected_body_substring || null,
@@ -697,6 +699,31 @@ export default function EndpointForm({ open, onClose, onSaved, endpoint, filters
         </Section>
 
         {/* ---------------------------------------- request/auth section */}
+        {/* ------------------------------------------- capture section */}
+        <Section
+          title="Captures"
+          description={form.screenshot_enabled ? 'Body and screenshot' : 'Body only'}
+          defaultOpen={false}
+        >
+          <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">
+            The response from the last successful check and the last failed one
+            is always kept, so you can see what the endpoint actually returned
+            when it broke. Only those two are stored — each new result replaces
+            the one before it.
+          </p>
+          <Toggle
+            checked={form.screenshot_enabled}
+            onChange={set('screenshot_enabled')}
+            label="Also capture a screenshot"
+            description={
+              isHttp
+                ? 'Renders the page in a browser. Worth it for a dashboard or a status page; for a JSON health route the captured body says more.'
+                : 'Only available for HTTP checks — there is no page to render for a TCP or TLS check.'
+            }
+            disabled={!isHttp}
+          />
+        </Section>
+
         <Section title="Request and authentication">
           <Toggle
             checked={form.follow_redirects}

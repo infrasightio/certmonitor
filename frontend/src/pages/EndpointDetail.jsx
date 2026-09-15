@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import clsx from 'clsx'
 
+import CapturePanel from '../components/CapturePanel'
 import DiagnosticsPanel from '../components/DiagnosticsPanel'
 import EndpointForm from '../components/EndpointForm'
 import PauseDialog from '../components/PauseDialog'
@@ -71,6 +72,7 @@ const TABS = [
   { id: 'overview', label: 'Overview' },
   { id: 'history', label: 'Check history' },
   { id: 'incidents', label: 'Incidents' },
+  { id: 'captures', label: 'Last response' },
   { id: 'network', label: 'Network' },
   { id: 'certificate', label: 'Certificate' },
   { id: 'configuration', label: 'Configuration' },
@@ -103,6 +105,7 @@ export default function EndpointDetail() {
   const [historyStatus, setHistoryStatus] = useState('')
   const [incidents, setIncidents] = useState(null)
   const [network, setNetwork] = useState(null)
+  const [captures, setCaptures] = useState(null)
   const [networkError, setNetworkError] = useState(null)
   const [config, setConfig] = useState(null)
   const [filters, setFilters] = useState({ environments: [], tags: [] })
@@ -253,6 +256,20 @@ export default function EndpointDetail() {
     if (tab === 'network') loadNetwork()
   }, [tab, loadNetwork])
 
+  const loadCaptures = useCallback(async () => {
+    try {
+      setCaptures(await endpointsApi.captures(endpointId))
+    } catch {
+      // Captures are supplementary. A failure to read them must not replace
+      // the endpoint's own page with an error.
+      setCaptures([])
+    }
+  }, [endpointId])
+
+  useEffect(() => {
+    if (tab === 'captures') loadCaptures()
+  }, [tab, loadCaptures])
+
   /** Everything on this screen that can change without the operator acting. */
   const refreshLive = useCallback(async () => {
     await Promise.all([
@@ -261,8 +278,17 @@ export default function EndpointDetail() {
       loadCertificate(),
       tab === 'history' ? loadHistory({ silent: true }) : null,
       tab === 'incidents' ? loadIncidents({ silent: true }) : null,
+      tab === 'captures' ? loadCaptures() : null,
     ])
-  }, [loadEndpoint, loadStats, loadCertificate, loadHistory, loadIncidents, tab])
+  }, [
+    loadEndpoint,
+    loadStats,
+    loadCertificate,
+    loadHistory,
+    loadIncidents,
+    loadCaptures,
+    tab,
+  ])
 
   // Paused while a dialog is open or an action is in flight: replacing the
   // endpoint underneath an open edit form or a diagnosis report would swap the
@@ -823,6 +849,15 @@ export default function EndpointDetail() {
             </>
           )}
         </Card>
+      ) : null}
+
+      {/* --------------------------------------------------- captures */}
+      {tab === 'captures' ? (
+        <CapturePanel
+          endpointId={endpointId}
+          captures={captures}
+          loading={captures === null}
+        />
       ) : null}
 
       {/* -------------------------------------------------- incidents */}

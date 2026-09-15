@@ -282,6 +282,17 @@ export const endpointsApi = {
   ssl: (id) => api.get(`/endpoints/${id}/ssl`).then((r) => r.data),
   network: (id) => api.get(`/endpoints/${id}/network`).then((r) => r.data),
   sslHistory: (id) => api.get(`/endpoints/${id}/ssl/history`).then((r) => r.data),
+  // The last successful and last failed response. At most two records - the
+  // pair is the whole history kept, by design.
+  captures: (id) => api.get(`/endpoints/${id}/captures`).then((r) => r.data),
+  // Fetched as a blob rather than pointed at by an <img src>: this API
+  // authenticates with a bearer header, and a plain <img> would omit it and
+  // render a broken image for a 401. The caller turns the blob into an object
+  // URL and revokes it on unmount.
+  captureImage: (id, outcome) =>
+    api
+      .get(`/endpoints/${id}/captures/${outcome}/image`, { responseType: 'blob' })
+      .then((r) => r.data),
   bulk: (payload) => api.post('/endpoints/bulk', payload).then((r) => r.data),
 }
 
