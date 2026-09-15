@@ -14,7 +14,7 @@ const STYLES = {
   success: 'border-green-200 bg-green-50 text-green-900 dark:border-green-900 dark:bg-green-950 dark:text-green-100',
   error: 'border-red-200 bg-red-50 text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100',
   warning: 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100',
-  info: 'border-slate-200 bg-white text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100',
+  info: 'border-slate-200 bg-white text-slate-900 dark:border-navy-700 dark:bg-navy-800 dark:text-slate-100',
 }
 
 let nextId = 1

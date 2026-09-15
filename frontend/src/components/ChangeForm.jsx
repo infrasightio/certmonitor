@@ -295,8 +295,8 @@ export default function ChangeForm({ open, onClose, onSaved, change, environment
           label={`Affected endpoints (${selected.length} selected)`}
           hint="Monitoring for these is paused automatically while the deployment runs, so it raises no false incidents or alerts."
         >
-          <div className="rounded-lg border border-slate-300 dark:border-slate-700">
-            <div className="relative border-b border-slate-200 p-2 dark:border-slate-700">
+          <div className="rounded-lg border border-slate-300 dark:border-navy-700">
+            <div className="relative border-b border-slate-200 p-2 dark:border-navy-700">
               <Search
                 size={14}
                 className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
@@ -317,7 +317,7 @@ export default function ChangeForm({ open, onClose, onSaved, change, environment
                 visibleEndpoints.map((endpoint) => (
                   <label
                     key={endpoint.id}
-                    className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 hover:bg-slate-50 dark:hover:bg-slate-800"
+                    className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 hover:bg-slate-50 dark:hover:bg-navy-800"
                   >
                     <input
                       type="checkbox"

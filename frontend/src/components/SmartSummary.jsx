@@ -39,7 +39,7 @@ function scoreTone(score) {
 function Tile({ icon: Icon, label, value, tone, to }) {
   const body = (
     <>
-      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-slate-100 dark:bg-slate-800">
+      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-slate-100 dark:bg-navy-800">
         <Icon size={17} className={tone} />
       </span>
       <span className="min-w-0">
@@ -288,7 +288,7 @@ export default function SmartSummary({ showControls = true }) {
               prioritised by environment, failure kind and impact
             </span>
           </div>
-          <ol className="divide-y divide-slate-100 dark:divide-slate-800">
+          <ol className="divide-y divide-slate-100 dark:divide-navy-800">
             {summary.attention.map((item, index) => {
               const style = PRIORITY_STYLE[item.priority] || PRIORITY_STYLE.low
               return (
@@ -350,7 +350,7 @@ export default function SmartSummary({ showControls = true }) {
             </span>
           </button>
           {showDaily ? (
-            <div className="border-t border-slate-100 px-4 py-3 dark:border-slate-800">
+            <div className="border-t border-slate-100 px-4 py-3 dark:border-navy-800">
               <dl className="mb-3 grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-4">
                 {[
                   ['Endpoints monitored', daily.endpoints_monitored],

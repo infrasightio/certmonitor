@@ -44,7 +44,7 @@ export function UserAvatar({ user, size = 28, className }) {
     <span
       className={clsx(
         'grid shrink-0 place-items-center rounded-full bg-slate-200 font-semibold uppercase',
-        'leading-none text-slate-700 dark:bg-slate-700 dark:text-slate-200',
+        'leading-none text-slate-700 dark:bg-navy-700 dark:text-slate-200',
         className,
       )}
       style={{ height: size, width: size, fontSize: size * 0.4 }}

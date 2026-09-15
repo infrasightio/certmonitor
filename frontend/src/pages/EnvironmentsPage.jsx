@@ -234,7 +234,7 @@ export default function EnvironmentsPage() {
                           Active
                         </span>
                       ) : (
-                        <span className="badge bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                        <span className="badge bg-slate-100 text-slate-600 dark:bg-navy-800 dark:text-slate-400">
                           Inactive
                         </span>
                       )}
@@ -349,7 +349,7 @@ export default function EnvironmentsPage() {
             description="Inactive environments stay assignable but are de-emphasised in filters."
           />
 
-          <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+          <div className="rounded-lg border border-slate-200 p-3 dark:border-navy-700">
             <p className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">
               Threshold overrides
             </p>

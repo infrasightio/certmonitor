@@ -70,7 +70,7 @@ const STAGE_STYLE = {
     label: 'Failed',
   },
   skipped: {
-    ring: 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900',
+    ring: 'border-slate-200 bg-slate-50 dark:border-navy-700 dark:bg-navy-900',
     text: 'text-slate-500 dark:text-slate-400',
     label: 'Not reached',
   },
@@ -98,7 +98,7 @@ const SEVERITY_STYLE = {
     label: 'LOW',
   },
   info: {
-    chip: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+    chip: 'bg-slate-100 text-slate-700 dark:bg-navy-800 dark:text-slate-300',
     bar: 'border-l-slate-400',
     label: 'INFO',
   },
@@ -152,9 +152,9 @@ const RISK_STYLE = {
 }
 
 const EVIDENCE_KIND = {
-  observed: { label: 'Observed', style: 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200' },
+  observed: { label: 'Observed', style: 'bg-slate-200 text-slate-700 dark:bg-navy-700 dark:text-slate-200' },
   inferred: { label: 'Inferred', style: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300' },
-  unknown: { label: 'Not checked', style: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400' },
+  unknown: { label: 'Not checked', style: 'bg-slate-100 text-slate-500 dark:bg-navy-800 dark:text-slate-400' },
 }
 
 const FOCUS_OPTIONS = [
@@ -177,7 +177,7 @@ function StatusIcon({ status, size = 15 }) {
 function Section({ title, icon: Icon, children, subtitle, defaultOpen = true }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <section className="rounded-lg border border-slate-200 dark:border-slate-700">
+    <section className="rounded-lg border border-slate-200 dark:border-navy-700">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
@@ -196,7 +196,7 @@ function Section({ title, icon: Icon, children, subtitle, defaultOpen = true }) 
         ) : null}
       </button>
       {open ? (
-        <div className="border-t border-slate-200 px-3 py-3 dark:border-slate-700">
+        <div className="border-t border-slate-200 px-3 py-3 dark:border-navy-700">
           {children}
         </div>
       ) : null}
@@ -210,7 +210,7 @@ function CommandLine({ command, note, risk = 'safe' }) {
   const style = RISK_STYLE[risk] || RISK_STYLE.safe
 
   return (
-    <div className="rounded-lg border border-slate-200 dark:border-slate-700">
+    <div className="rounded-lg border border-slate-200 dark:border-navy-700">
       <div className="flex items-start gap-2 bg-slate-900 px-2.5 py-2 dark:bg-black">
         <code className="min-w-0 flex-1 overflow-x-auto whitespace-pre-wrap break-all font-mono text-[11.5px] leading-relaxed text-slate-100">
           {command}
@@ -340,16 +340,16 @@ export default function DiagnosticsPanel({
         <div className="space-y-3">
           {/* ============================================ 1. THE VERDICT */}
           <div className={clsx('rounded-lg border border-l-4 p-3.5', severity.bar,
-            'border-slate-200 dark:border-slate-700')}>
+            'border-slate-200 dark:border-navy-700')}>
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <span className={clsx('badge', severity.chip)}>
                 <ShieldAlert size={12} /> {severity.label}
               </span>
-              <span className="badge bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              <span className="badge bg-slate-100 text-slate-700 dark:bg-navy-800 dark:text-slate-300">
                 {confidence.label}
               </span>
               {report.deepest_layer_ok ? (
-                <span className="badge bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                <span className="badge bg-slate-100 text-slate-700 dark:bg-navy-800 dark:text-slate-300">
                   Reached {LAYER_META[report.deepest_layer_ok]?.label} OK
                 </span>
               ) : null}
@@ -395,7 +395,7 @@ export default function DiagnosticsPanel({
             ) : null}
 
             {report.root_cause ? (
-              <div className="mt-2.5 rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-800/60">
+              <div className="mt-2.5 rounded-lg bg-slate-50 px-3 py-2 dark:bg-navy-800/60">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   Most likely cause
                 </p>
@@ -423,7 +423,7 @@ export default function DiagnosticsPanel({
                 'rounded-lg border p-3 text-sm',
                 resolved
                   ? 'border-green-300 bg-green-50 dark:border-green-800 dark:bg-green-950/30'
-                  : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/50',
+                  : 'border-slate-200 bg-slate-50 dark:border-navy-700 dark:bg-navy-800/50',
               )}
             >
               <p className="mb-1.5 font-semibold text-slate-800 dark:text-slate-100">
@@ -465,8 +465,8 @@ export default function DiagnosticsPanel({
                     className={clsx(
                       'rounded-lg border p-2.5',
                       index === 0
-                        ? 'border-slate-300 bg-slate-50 dark:border-slate-600 dark:bg-slate-800/60'
-                        : 'border-slate-200 dark:border-slate-700',
+                        ? 'border-slate-300 bg-slate-50 dark:border-navy-600 dark:bg-navy-800/60'
+                        : 'border-slate-200 dark:border-navy-700',
                     )}
                   >
                     <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -475,7 +475,7 @@ export default function DiagnosticsPanel({
                           'badge',
                           index === 0
                             ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900'
-                            : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+                            : 'bg-slate-100 text-slate-600 dark:bg-navy-800 dark:text-slate-300',
                         )}
                       >
                         {BAND_COPY[candidate.band] || candidate.band}
@@ -547,7 +547,7 @@ export default function DiagnosticsPanel({
             </div>
 
             {/* itemised evidence */}
-            <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+            <ul className="divide-y divide-slate-100 dark:divide-navy-800">
               {report.evidence?.map((item, index) => (
                 <li key={index} className="flex flex-wrap items-start gap-x-2 gap-y-1 py-1.5">
                   <span className="w-44 shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400">
@@ -599,7 +599,7 @@ export default function DiagnosticsPanel({
               {showLayerData ? 'Hide' : 'Show'} raw probe data
             </button>
             {showLayerData ? (
-              <pre className="mt-2 max-h-72 overflow-auto rounded-lg bg-slate-900 p-2.5 font-mono text-[11px] leading-relaxed text-slate-100">
+              <pre className="mt-2 max-h-72 overflow-auto rounded-lg bg-navy-900 p-2.5 font-mono text-[11px] leading-relaxed text-slate-100">
                 {JSON.stringify(
                   { layers: report.layers, comparisons: report.comparisons },
                   null,
@@ -665,7 +665,7 @@ export default function DiagnosticsPanel({
               ) : null}
 
               {report.recurrence?.most_common_verdict_count >= 2 ? (
-                <div className="rounded-lg bg-slate-50 p-2.5 text-sm dark:bg-slate-800/60">
+                <div className="rounded-lg bg-slate-50 p-2.5 text-sm dark:bg-navy-800/60">
                   <p className="font-medium text-slate-800 dark:text-slate-100">
                     Diagnosed as “{report.recurrence.most_common_verdict}”{' '}
                     {report.recurrence.most_common_verdict_count} times in the last{' '}
@@ -706,7 +706,7 @@ export default function DiagnosticsPanel({
                   return (
                     <li
                       key={action.step}
-                      className="rounded-lg border border-slate-200 p-2.5 dark:border-slate-700"
+                      className="rounded-lg border border-slate-200 p-2.5 dark:border-navy-700"
                     >
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-slate-800 text-[11px] font-bold text-white dark:bg-slate-200 dark:text-slate-900">
@@ -780,7 +780,7 @@ export default function DiagnosticsPanel({
                 {report.findings.map((finding, index) => (
                   <li
                     key={index}
-                    className="rounded-lg border border-slate-200 p-2.5 dark:border-slate-700"
+                    className="rounded-lg border border-slate-200 p-2.5 dark:border-navy-700"
                   >
                     <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-900 dark:text-slate-50">
                       <span
@@ -867,7 +867,7 @@ export default function DiagnosticsPanel({
 
           {/* =============================================== 10. RE-DIAGNOSE */}
           {onRerun ? (
-            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 p-2.5 dark:border-slate-700">
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 p-2.5 dark:border-navy-700">
               <label
                 htmlFor="diagnose-focus"
                 className="text-xs font-medium text-slate-500 dark:text-slate-400"

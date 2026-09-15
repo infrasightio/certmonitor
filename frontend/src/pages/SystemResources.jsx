@@ -89,7 +89,7 @@ function Meter({ label, percent, detail, thresholds }) {
         </span>
       </div>
       <div
-        className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700"
+        className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-navy-700"
         role="img"
         aria-label={`${label}: ${percent == null ? 'not reported' : `${percent}%`}`}
       >
@@ -484,7 +484,7 @@ export default function SystemResources() {
             }
             stats={worker}
             extra={
-              <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-slate-100 pt-2 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+              <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-slate-100 pt-2 text-xs text-slate-500 dark:border-navy-800 dark:text-slate-400">
                 <span>In flight: {worker.in_flight}</span>
                 <span>Failed: {formatNumber(worker.checks_failed)}</span>
                 <span>Up {Math.round(worker.uptime_seconds / 3600)}h</span>

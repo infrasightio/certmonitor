@@ -185,9 +185,12 @@ export default function Login() {
   const isThrottled = errorStatus === 423 || errorStatus === 429
 
   return (
-    <div className="min-h-screen bg-white dark:bg-slate-950 lg:grid lg:grid-cols-[1.1fr_1fr]">
+    <div className="min-h-screen bg-white dark:bg-navy-950 lg:grid lg:grid-cols-[1.1fr_1fr]">
       {/* ================================================= brand panel */}
-      <aside className="relative hidden overflow-hidden bg-slate-900 p-10 text-white lg:flex lg:flex-col">
+      {/* navy, not slate: this panel is dark in BOTH modes, so it should be
+          the same dark the rest of dark mode is - and the indigo glow below
+          sits better on blue than on graphite. */}
+      <aside className="relative hidden overflow-hidden bg-navy-900 p-10 text-white lg:flex lg:flex-col">
         {/* Depth without motion - nothing here competes with the form, and
             nothing moves for anyone who asked that it not. */}
         <div
@@ -274,7 +277,7 @@ export default function Login() {
           <button
             type="button"
             onClick={toggleTheme}
-            className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+            className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-navy-800 dark:hover:text-slate-100"
             aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
           >
             {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
@@ -396,7 +399,7 @@ export default function Login() {
             </button>
           </form>
 
-          <div className="mt-8 space-y-2 border-t border-slate-200 pt-5 dark:border-slate-800">
+          <div className="mt-8 space-y-2 border-t border-slate-200 pt-5 dark:border-navy-800">
             <SystemStatus />
             <p className="text-center text-xs text-slate-400 dark:text-slate-500">
               Repeated failed attempts temporarily lock the account. An

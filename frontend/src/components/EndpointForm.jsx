@@ -58,7 +58,7 @@ const EMPTY = {
 function Section({ title, description, children, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <div className="rounded-lg border border-slate-200 dark:border-slate-700">
+    <div className="rounded-lg border border-slate-200 dark:border-navy-700">
       <button
         type="button"
         className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
@@ -72,7 +72,7 @@ function Section({ title, description, children, defaultOpen = false }) {
         ) : null}
       </button>
       {open ? (
-        <div className="space-y-3 border-t border-slate-200 px-3 py-3 dark:border-slate-700">
+        <div className="space-y-3 border-t border-slate-200 px-3 py-3 dark:border-navy-700">
           {children}
         </div>
       ) : null}
@@ -507,8 +507,8 @@ export default function EndpointForm({ open, onClose, onSaved, endpoint, filters
           label={`Depends on (${form.dependency_ids.length} selected)`}
           hint="Other monitored endpoints this one relies on. Diagnose reports it as evidence when a declared dependency is down at the same time."
         >
-          <div className="rounded-lg border border-slate-300 dark:border-slate-700">
-            <div className="relative border-b border-slate-200 p-2 dark:border-slate-700">
+          <div className="rounded-lg border border-slate-300 dark:border-navy-700">
+            <div className="relative border-b border-slate-200 p-2 dark:border-navy-700">
               <Search
                 size={14}
                 className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
@@ -527,7 +527,7 @@ export default function EndpointForm({ open, onClose, onSaved, endpoint, filters
                 visibleDependencies.map((candidate) => (
                   <label
                     key={candidate.id}
-                    className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 hover:bg-slate-50 dark:hover:bg-slate-800"
+                    className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 hover:bg-slate-50 dark:hover:bg-navy-800"
                   >
                     <input
                       type="checkbox"

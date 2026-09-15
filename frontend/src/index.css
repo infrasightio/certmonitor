@@ -26,8 +26,13 @@
  * has no elevation to read and glares for a whole shift, so the page drops a
  * few percent and the surface is paper rather than #FFF. In dark, a
  * near-black page makes light text halate and leaves nothing below it for a
- * card to lift off, so the page sits at slate-950 and every surface above it
+ * card to lift off, so the page sits at navy-950 and every surface above it
  * steps up from there.
+ *
+ * The two modes draw their surfaces from different families - `slate` in
+ * light, `navy` in dark - and their text from the same one. Which is why
+ * these four names exist: a component asks for "the surface" and never has to
+ * know which family answers.
  */
 @layer base {
   :root {
@@ -57,26 +62,39 @@
   }
 
   /*
-   * Dark is a dark room, not a void.
+   * Dark is a blue room, not a void.
    *
-   * The page sits at slate-950 rather than near-black: light text on black
-   * halates, and there is nowhere below black to put a page that a card has
-   * to lift off. Each step up the ramp is one level of elevation - page,
-   * card, dialog - so the same reading of depth works in both modes.
+   * Surfaces come from `navy`, a family of its own rather than the deep end of
+   * `slate`, because `slate-900` is also light mode's heading ink - pushing it
+   * blue enough for this would have turned every heading in light mode navy.
+   * Text still comes from `slate`: a neutral on a blue ground reads cleaner
+   * than a blue on a blue one.
    *
-   * Body text is slate-100 rather than white for the same reason. It still
-   * clears 13:1, which is plenty; the glow around white-on-black is what
-   * makes a dark screen tiring, not the absence of contrast.
+   * The page sits at navy-950 rather than near-black. Light text on black
+   * halates, and there is nowhere below black to put a page that a card has to
+   * lift off - so page, card and dialog are navy-950, -900 and -800, each a
+   * visible step. In dark that IS the elevation: a dark shadow on a dark
+   * surface is nothing.
+   *
+   * Body text is slate-100 rather than white for the same reason as the
+   * ground. It still clears 13:1, which is plenty; the glow around
+   * white-on-black is what makes a dark screen tiring, not a shortage of
+   * contrast.
    */
   .dark {
     color-scheme: dark;
 
-    --surface: 28 33 41;
-    --surface-raised: 42 48 57;
-    --surface-sunken: 18 21 28;
-    --surface-muted: 42 48 57;
-    --border: 59 67 81;
-    --border-subtle: 42 48 57;
+    /* navy-900 */
+    --surface: 18 28 47;
+    /* navy-800 */
+    --surface-raised: 30 41 66;
+    /* navy-950 */
+    --surface-sunken: 11 19 34;
+    --surface-muted: 30 41 66;
+    /* navy-700 */
+    --border: 46 60 88;
+    --border-subtle: 30 41 66;
+    /* slate-100 and slate-400 - text stays neutral. */
     --text: 230 233 240;
     --text-muted: 120 130 154;
     --accent: 122 141 235;
@@ -130,7 +148,7 @@
      handle the tick, which stays crisp at any zoom. */
   input[type='checkbox'],
   input[type='radio'] {
-    @apply h-4 w-4 shrink-0 cursor-pointer border-slate-300 dark:border-slate-600;
+    @apply h-4 w-4 shrink-0 cursor-pointer border-slate-300 dark:border-navy-600;
     accent-color: theme('colors.brand.600');
   }
 
@@ -185,7 +203,7 @@
      the shadow does nothing - a dark shadow on a dark surface never could -
      so the step up the ramp and the border carry the elevation there. */
   .card {
-    @apply rounded-xl border bg-white shadow-card dark:bg-slate-900;
+    @apply rounded-xl border bg-white shadow-card dark:bg-navy-900;
     border-color: rgb(var(--border));
   }
 
@@ -226,8 +244,8 @@
   .btn-secondary {
     @apply btn border border-slate-200 bg-white text-slate-700 shadow-btn
            hover:border-slate-300 hover:bg-slate-50 active:bg-slate-100
-           dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200
-           dark:hover:border-slate-600 dark:hover:bg-slate-700;
+           dark:border-navy-700 dark:bg-navy-800 dark:text-slate-200
+           dark:hover:border-navy-600 dark:hover:bg-navy-700;
   }
 
   .btn-danger {
@@ -236,7 +254,7 @@
 
   .btn-ghost {
     @apply btn text-slate-600 hover:bg-slate-100 hover:text-slate-900
-           active:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-800
+           active:bg-slate-200 dark:text-slate-300 dark:hover:bg-navy-800
            dark:hover:text-slate-50;
   }
 
@@ -259,8 +277,8 @@
            focus:border-brand-500 focus:outline-none focus:ring-[3px] focus:ring-brand-500/20
            focus:ring-offset-0
            disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500
-           dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100
-           dark:placeholder:text-slate-500 dark:disabled:bg-slate-900;
+           dark:border-navy-700 dark:bg-navy-800 dark:text-slate-100
+           dark:placeholder:text-slate-500 dark:disabled:bg-navy-900;
   }
 
   .label {
@@ -329,7 +347,7 @@
      and badges sitting in the row, which are what the eye is actually
      hunting for. */
   :where(.table tbody tr):hover {
-    @apply bg-brand-50/60 dark:bg-slate-800/50;
+    @apply bg-brand-50/60 dark:bg-navy-800/50;
   }
 
   /* --------------------------------------------------------------- marks */
@@ -345,7 +363,7 @@
   .chip {
     @apply inline-flex items-center gap-1 rounded-md bg-brand-50 px-1.5 py-0.5 text-[11px]
            font-medium text-brand-800 ring-1 ring-inset ring-brand-100
-           dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700;
+           dark:bg-navy-800 dark:text-slate-300 dark:ring-navy-700;
   }
 
   /* ----------------------------------------------------------------- nav */
@@ -353,20 +371,24 @@
   .nav-link {
     @apply flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-600
            transition-colors duration-100 hover:bg-slate-100 hover:text-slate-900
-           dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100;
+           dark:text-slate-400 dark:hover:bg-navy-800 dark:hover:text-slate-100;
   }
 
   /* The active item should be readable from the far side of a desk: brand
      tint, brand text, one weight heavier, and a ring so it keeps an edge
      where the fill is too faint to show one. */
   .nav-link-active {
+    /* brand-900 in dark, not brand-950: against a navy rail the darkest
+       indigo is nearly the same colour as the surface behind it, and the one
+       item that has to be readable across a room disappears. The lighter fill
+       keeps it indigo against blue. */
     @apply bg-brand-50 font-semibold text-brand-700 ring-1 ring-inset ring-brand-100
            hover:bg-brand-50 hover:text-brand-700
-           dark:bg-brand-950 dark:text-brand-300 dark:ring-brand-900
-           dark:hover:bg-brand-950 dark:hover:text-brand-300;
+           dark:bg-brand-900 dark:text-brand-200 dark:ring-brand-800
+           dark:hover:bg-brand-900 dark:hover:text-brand-200;
   }
 
   .skeleton {
-    @apply animate-pulse rounded bg-slate-200 dark:bg-slate-800;
+    @apply animate-pulse rounded bg-slate-200 dark:bg-navy-800;
   }
 }

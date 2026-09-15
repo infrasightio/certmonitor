@@ -462,7 +462,7 @@ export default function Incidents() {
             {selected.error_message ? (
               <div>
                 <p className="label">Error</p>
-                <pre className="overflow-x-auto rounded bg-slate-50 p-2 font-mono text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                <pre className="overflow-x-auto rounded bg-slate-50 p-2 font-mono text-xs text-slate-700 dark:bg-navy-800 dark:text-slate-300">
                   {selected.error_message}
                 </pre>
               </div>
@@ -471,7 +471,7 @@ export default function Incidents() {
             {selected.timeline?.length ? (
               <div>
                 <p className="label">Timeline</p>
-                <ol className="space-y-1 border-l-2 border-slate-200 pl-3 dark:border-slate-700">
+                <ol className="space-y-1 border-l-2 border-slate-200 pl-3 dark:border-navy-700">
                   {selected.timeline.map((entry, index) => (
                     <li key={index} className="text-xs text-slate-600 dark:text-slate-300">
                       <span className="font-medium">

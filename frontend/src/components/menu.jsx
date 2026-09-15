@@ -161,7 +161,7 @@ export function ActionMenu({
               }}
               className={clsx(
                 'z-50 overflow-hidden rounded-lg border border-slate-200 bg-white text-left',
-                'shadow-pop dark:border-slate-700 dark:bg-slate-800',
+                'shadow-pop dark:border-navy-700 dark:bg-navy-800',
               )}
             >
               {children({ close })}
@@ -175,7 +175,7 @@ export function ActionMenu({
 
 /** Shared item styling, so callers do not re-derive it per menu. */
 export const MENU_ITEM =
-  'block w-full px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-700'
+  'block w-full px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-navy-700'
 
 export const MENU_ITEM_DANGER =
   'block w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 ' +

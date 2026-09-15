@@ -70,7 +70,7 @@ const CHROME = {
   // on. Written as hex because Recharts takes colours as values, not classes -
   // if the ramp moves, these move with it.
   light: { grid: '#d6dbe5', axis: '#bdc4d2', muted: '#5e6880', surface: '#f9fafc' },
-  dark: { grid: '#2a3039', axis: '#3b4351', muted: '#78829a', surface: '#1c2129' },
+  dark: { grid: '#1e2942', axis: '#2e3c58', muted: '#78829a', surface: '#121c2f' },
 }
 
 /** Tracks the `dark` class the layout toggles, so charts restep their colours. */
@@ -124,7 +124,7 @@ function axisProps(chrome) {
 /** Tooltip shell: one surface, hairline ring, no drop shadow theatre. */
 function TooltipShell({ title, rows }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs shadow-pop dark:border-slate-700 dark:bg-slate-800">
+    <div className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs shadow-pop dark:border-navy-700 dark:bg-navy-800">
       {title ? (
         <p className="mb-1 font-medium text-slate-900 dark:text-slate-100">{title}</p>
       ) : null}
@@ -520,7 +520,7 @@ export function StatusDistribution({ counts, total, onSelect }) {
               className={clsx(
                 'flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-xs',
                 onSelect &&
-                  'cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800',
+                  'cursor-pointer hover:bg-slate-100 dark:hover:bg-navy-800',
               )}
               title={onSelect ? `View ${segment.label.toLowerCase()} endpoints` : undefined}
             >

@@ -66,7 +66,7 @@ function RichText({ value }) {
     part.length > 2 && part.startsWith('`') && part.endsWith('`') ? (
       <code
         key={index}
-        className="mx-px rounded border border-slate-200 bg-slate-100 px-1 py-px font-mono text-[0.85em] text-slate-800 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-200"
+        className="mx-px rounded border border-slate-200 bg-slate-100 px-1 py-px font-mono text-[0.85em] text-slate-800 dark:border-navy-700 dark:bg-navy-800/80 dark:text-slate-200"
       >
         {part.slice(1, -1)}
       </code>
@@ -112,7 +112,7 @@ const SECTION_TONE = {
   fix:
     'bg-emerald-50 text-emerald-600 ring-emerald-200/70 dark:bg-emerald-950/50 dark:text-emerald-300 dark:ring-emerald-900',
   meta:
-    'bg-slate-100 text-slate-500 ring-slate-200/70 dark:bg-slate-800 dark:text-slate-400 dark:ring-slate-700',
+    'bg-slate-100 text-slate-500 ring-slate-200/70 dark:bg-navy-800 dark:text-slate-400 dark:ring-navy-700',
 }
 
 /** One section of a finished RCA, set as a document rather than a form.
@@ -128,7 +128,7 @@ function Section({ icon: Icon, tone, label, value, rail = true, children }) {
     <section className="relative pl-11">
       {rail ? (
         <span
-          className="absolute bottom-[-1.5rem] left-[15px] top-9 w-px bg-slate-200 dark:bg-slate-800"
+          className="absolute bottom-[-1.5rem] left-[15px] top-9 w-px bg-slate-200 dark:bg-navy-800"
           aria-hidden="true"
         />
       ) : null}
@@ -536,7 +536,7 @@ export default function RcaDetail() {
           </dl>
 
           {rca.incident ? (
-            <p className="mt-3.5 border-t border-slate-100 pt-2.5 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+            <p className="mt-3.5 border-t border-slate-100 pt-2.5 text-xs text-slate-500 dark:border-navy-800 dark:text-slate-400">
               RCA and incident lifecycles are independent — completing this
               changes nothing about the incident.
             </p>
@@ -669,7 +669,7 @@ export default function RcaDetail() {
                 // actually done, which is the only interesting thing about a
                 // preventive-action list a month after the incident.
                 <span className="flex items-center gap-2">
-                  <span className="h-1.5 w-20 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+                  <span className="h-1.5 w-20 overflow-hidden rounded-full bg-slate-200 dark:bg-navy-700">
                     <span
                       className="block h-full rounded-full bg-emerald-500 transition-all"
                       style={{ width: `${(doneCount / actions.length) * 100}%` }}
@@ -694,7 +694,7 @@ export default function RcaDetail() {
                   // while the text stays aligned with everything above it.
                   <li
                     key={index}
-                    className="-mx-2 flex items-start gap-2.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60"
+                    className="-mx-2 flex items-start gap-2.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-slate-50 dark:hover:bg-navy-800/60"
                   >
                     <input
                       type="checkbox"
@@ -785,7 +785,7 @@ export default function RcaDetail() {
                 {attachments.map((attachment, index) => (
                   <li
                     key={attachment.id || index}
-                    className="flex items-center gap-2 rounded-lg border border-slate-200 px-2.5 py-1.5 dark:border-slate-700"
+                    className="flex items-center gap-2 rounded-lg border border-slate-200 px-2.5 py-1.5 dark:border-navy-700"
                   >
                     <ExternalLink size={13} className="shrink-0 text-slate-400" />
                     <a
@@ -895,7 +895,7 @@ export default function RcaDetail() {
               <ol className="mb-4 space-y-3">
                 {rca.comments.map((entry) => (
                   <li key={entry.id} className="flex gap-2.5">
-                    <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-slate-200 text-[11px] font-semibold uppercase text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+                    <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-slate-200 text-[11px] font-semibold uppercase text-slate-700 dark:bg-navy-700 dark:text-slate-200">
                       {(entry.username || '?').slice(0, 2)}
                     </span>
                     <div className="min-w-0 flex-1">
@@ -1015,12 +1015,12 @@ export default function RcaDetail() {
               // each row: a sequence of events should look like a sequence.
               // Drawn with ::before rather than a span, because an <ol> may
               // only contain list items.
-              <ol className="relative space-y-3.5 pl-5 before:absolute before:inset-y-1.5 before:left-[3px] before:w-px before:bg-slate-200 before:content-[''] dark:before:bg-slate-700">
+              <ol className="relative space-y-3.5 pl-5 before:absolute before:inset-y-1.5 before:left-[3px] before:w-px before:bg-slate-200 before:content-[''] dark:before:bg-navy-700">
                 {timeline.map((entry, index) => (
                   <li key={index} className="relative">
                     <span
                       className={clsx(
-                        'absolute -left-5 top-1.5 h-[7px] w-[7px] rounded-full ring-2 ring-white dark:ring-slate-900',
+                        'absolute -left-5 top-1.5 h-[7px] w-[7px] rounded-full ring-2 ring-white dark:ring-navy-900',
                         timelineTone(entry.kind),
                       )}
                       aria-hidden="true"
@@ -1055,7 +1055,7 @@ export default function RcaDetail() {
               </p>
               <ul className="space-y-2.5">
                 {rca.similar_past.map((item) => (
-                  <li key={item.rca_id} className="border-b border-slate-100 pb-2 last:border-0 dark:border-slate-800">
+                  <li key={item.rca_id} className="border-b border-slate-100 pb-2 last:border-0 dark:border-navy-800">
                     <p className="text-xs text-slate-400">
                       <Link
                         to={`/rca/${item.rca_id}`}

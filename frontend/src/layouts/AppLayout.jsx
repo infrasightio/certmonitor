@@ -204,7 +204,7 @@ export default function AppLayout() {
                 unacknowledged alert must stay visible in either mode. */}
             {collapsed && item.badge === 'alerts' && alertCount > 0 ? (
               <span
-                className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-slate-900"
+                className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-navy-900"
                 aria-hidden="true"
               />
             ) : null}
@@ -243,7 +243,7 @@ export default function AppLayout() {
           />
         </div>
       ) : (
-        <div className="mt-auto rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs dark:border-slate-800 dark:bg-slate-800/60">
+        <div className="mt-auto rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs dark:border-navy-800 dark:bg-navy-800/60">
           <p className="mb-1 font-medium text-slate-600 dark:text-slate-300">System</p>
           <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
             <span className={clsx('h-1.5 w-1.5 rounded-full', workerTone)} aria-hidden="true" />
@@ -282,7 +282,7 @@ export default function AppLayout() {
     // theme end up disagreeing about what colour the page is.
     <div className="min-h-screen">
       {/* ------------------------------------------------------ top bar */}
-      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/85 backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/90">
+      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/85 backdrop-blur-md dark:border-navy-800 dark:bg-navy-900/90">
         <div className="flex h-14 items-center gap-3 px-3 sm:px-4">
           <button
             type="button"
@@ -357,10 +357,10 @@ export default function AppLayout() {
                     aria-hidden="true"
                   />
                   <div
-                    className="absolute right-0 z-20 mt-1.5 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-pop dark:border-slate-700 dark:bg-slate-800"
+                    className="absolute right-0 z-20 mt-1.5 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-pop dark:border-navy-700 dark:bg-navy-800"
                     role="menu"
                   >
-                    <div className="border-b border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800/60">
+                    <div className="border-b border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-navy-700 dark:bg-navy-800/60">
                       <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
                         {user?.full_name || user?.username}
                       </p>
@@ -370,7 +370,7 @@ export default function AppLayout() {
                     </div>
                     <NavLink
                       to="/change-password"
-                      className="block px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700"
+                      className="block px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-navy-700"
                       role="menuitem"
                       onClick={() => setMenuOpen(false)}
                     >
@@ -396,7 +396,7 @@ export default function AppLayout() {
         {/* --------------------------------------------------- sidebar */}
         <aside
           className={clsx(
-            'sticky top-14 hidden h-[calc(100vh-3.5rem)] shrink-0 overflow-y-auto border-r border-slate-200 bg-white transition-[width] duration-150 lg:block dark:border-slate-800 dark:bg-slate-900',
+            'sticky top-14 hidden h-[calc(100vh-3.5rem)] shrink-0 overflow-y-auto border-r border-slate-200 bg-white transition-[width] duration-150 lg:block dark:border-navy-800 dark:bg-navy-900',
             railCollapsed ? 'w-16' : 'w-60',
           )}
         >
@@ -409,11 +409,11 @@ export default function AppLayout() {
         {mobileOpen ? (
           <div className="fixed inset-0 top-14 z-20 lg:hidden">
             <div
-              className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]"
+              className="absolute inset-0 bg-navy-950/50 backdrop-blur-[2px]"
               onMouseDown={() => setMobileOpen(false)}
               aria-hidden="true"
             />
-            <aside className="relative h-full w-64 overflow-y-auto border-r border-slate-200 bg-white shadow-pop dark:border-slate-800 dark:bg-slate-900">
+            <aside className="relative h-full w-64 overflow-y-auto border-r border-slate-200 bg-white shadow-pop dark:border-navy-800 dark:bg-navy-900">
               {sidebar(false)}
             </aside>
           </div>

@@ -171,7 +171,7 @@ export default function ImportExport() {
                             ? 'bg-green-600 text-white'
                             : index === step
                               ? 'bg-brand-600 text-white'
-                              : 'bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-400',
+                              : 'bg-slate-200 text-slate-500 dark:bg-navy-700 dark:text-slate-400',
                         )}
                       >
                         {index < step ? '✓' : index + 1}
@@ -200,7 +200,7 @@ export default function ImportExport() {
                         'rounded-xl border-2 border-dashed px-4 py-10 text-center transition-colors',
                         dragOver
                           ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
-                          : 'border-slate-300 dark:border-slate-700',
+                          : 'border-slate-300 dark:border-navy-700',
                       )}
                       onDragOver={(event) => {
                         event.preventDefault()
@@ -254,7 +254,7 @@ export default function ImportExport() {
                       />
                     </div>
 
-                    <div className="mt-4 rounded-lg bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
+                    <div className="mt-4 rounded-lg bg-slate-50 p-3 text-xs text-slate-600 dark:bg-navy-800/60 dark:text-slate-300">
                       <p className="mb-1 font-medium">Expected columns</p>
                       <p className="font-mono text-[11px] leading-relaxed">
                         name, url, environment, tags, interval, timeout, description,
@@ -276,7 +276,7 @@ export default function ImportExport() {
                 {step === 1 && preview ? (
                   <div>
                     <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                      <div className="rounded-lg border border-slate-200 p-2.5 dark:border-slate-700">
+                      <div className="rounded-lg border border-slate-200 p-2.5 dark:border-navy-700">
                         <p className="text-lg font-semibold">{preview.total_rows}</p>
                         <p className="text-[11px] text-slate-500">Rows in file</p>
                       </div>
@@ -336,7 +336,7 @@ export default function ImportExport() {
                       </span>
                     </div>
 
-                    <div className="table-wrap max-h-[420px] overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-700">
+                    <div className="table-wrap max-h-[420px] overflow-y-auto rounded-lg border border-slate-200 dark:border-navy-700">
                       <table className="table">
                         <thead>
                           <tr>
@@ -474,7 +474,7 @@ export default function ImportExport() {
                         </p>
                         <p className="text-xs text-red-700 dark:text-red-300">Failed</p>
                       </div>
-                      <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                      <div className="rounded-lg border border-slate-200 p-3 dark:border-navy-700">
                         <p className="text-xl font-semibold">{result.skipped_count}</p>
                         <p className="text-xs text-slate-500">Skipped</p>
                       </div>
@@ -496,7 +496,7 @@ export default function ImportExport() {
                     ) : null}
 
                     {result.created?.length ? (
-                      <div className="table-wrap max-h-64 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-700">
+                      <div className="table-wrap max-h-64 overflow-y-auto rounded-lg border border-slate-200 dark:border-navy-700">
                         <table className="table">
                           <thead>
                             <tr>

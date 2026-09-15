@@ -252,7 +252,7 @@ export default function Rca() {
         <div className="xl:col-span-2">
           {/* ------------------------------------------------ tabs */}
           <div
-            className="mb-3 flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800"
+            className="mb-3 flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-navy-800"
             role="tablist"
           >
             {TABS.map((item) => (
@@ -422,7 +422,7 @@ export default function Rca() {
               <div className="card-header">
                 <h2 className="card-title">Pending queue</h2>
               </div>
-              <ol className="divide-y divide-slate-100 dark:divide-slate-800">
+              <ol className="divide-y divide-slate-100 dark:divide-navy-800">
                 {board.pending_queue.map((rca) => (
                   <li key={rca.id} className="px-4 py-2 text-sm">
                     <Link
@@ -527,7 +527,7 @@ export default function Rca() {
                       <Repeat size={15} /> Recurring root causes
                     </h2>
                   </div>
-                  <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                  <ul className="divide-y divide-slate-100 dark:divide-navy-800">
                     {analytics.recurring_root_causes.map((item, index) => (
                       <li key={index} className="px-4 py-2.5">
                         <p className="text-sm font-medium text-slate-900 dark:text-slate-50">

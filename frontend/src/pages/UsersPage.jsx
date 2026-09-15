@@ -342,7 +342,7 @@ export default function UsersPage() {
                         </div>
                       </td>
                       <td>
-                        <span className="badge bg-slate-100 capitalize text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                        <span className="badge bg-slate-100 capitalize text-slate-700 dark:bg-navy-800 dark:text-slate-300">
                           {row.role}
                         </span>
                       </td>
@@ -353,7 +353,7 @@ export default function UsersPage() {
                               Enabled
                             </span>
                           ) : (
-                            <span className="badge bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                            <span className="badge bg-slate-100 text-slate-600 dark:bg-navy-800 dark:text-slate-400">
                               Disabled
                             </span>
                           )}

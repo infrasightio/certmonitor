@@ -25,7 +25,7 @@ const ACTION_TONE = (action) => {
   if (action.includes('password') || action.includes('role') || action.includes('settings')) {
     return 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
   }
-  return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+  return 'bg-slate-100 text-slate-700 dark:bg-navy-800 dark:text-slate-300'
 }
 
 export default function AuditLogs() {
@@ -297,7 +297,7 @@ export default function AuditLogs() {
               <p className="label">Details</p>
               {/* Credential-shaped values are scrubbed server-side before the
                   entry is written, so this is always safe to display. */}
-              <pre className="max-h-72 overflow-auto rounded-lg bg-slate-50 p-3 font-mono text-[11px] text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+              <pre className="max-h-72 overflow-auto rounded-lg bg-slate-50 p-3 font-mono text-[11px] text-slate-700 dark:bg-navy-800 dark:text-slate-200">
                 {JSON.stringify(selected.details, null, 2)}
               </pre>
             </div>

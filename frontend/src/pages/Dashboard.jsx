@@ -65,7 +65,7 @@ function StatTile({ icon: Icon, label, value, sub, tone = 'neutral', to }) {
     info: 'text-brand-600 dark:text-brand-400',
   }
   const iconTones = {
-    neutral: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
+    neutral: 'bg-slate-100 text-slate-500 dark:bg-navy-800 dark:text-slate-400',
     good: 'bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400',
     warn: 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400',
     bad: 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400',

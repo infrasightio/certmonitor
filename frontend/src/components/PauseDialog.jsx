@@ -86,7 +86,7 @@ export default function PauseDialog({
           <button
             key={preset}
             type="button"
-            className="rounded-full border border-slate-300 px-2.5 py-1 text-xs text-slate-600 transition-colors hover:border-brand-400 hover:bg-brand-50 hover:text-brand-700 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+            className="rounded-full border border-slate-300 px-2.5 py-1 text-xs text-slate-600 transition-colors hover:border-brand-400 hover:bg-brand-50 hover:text-brand-700 dark:border-navy-700 dark:text-slate-300 dark:hover:bg-navy-800 dark:hover:text-slate-100"
             onClick={() => setReason(preset)}
           >
             {preset}

@@ -13,11 +13,11 @@ export const RCA_STATUS_LABELS = {
 // Status carries meaning, so it is never conveyed by colour alone - the label
 // is always rendered alongside.
 const STATUS_STYLE = {
-  not_requested: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+  not_requested: 'bg-slate-100 text-slate-600 dark:bg-navy-800 dark:text-slate-400',
   pending: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
   in_progress: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
   completed: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
-  not_required: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
+  not_required: 'bg-slate-100 text-slate-500 dark:bg-navy-800 dark:text-slate-400',
 }
 
 export function RcaStatusBadge({ status, overdue = false }) {
@@ -55,7 +55,7 @@ export const CATEGORY_LABELS = {
 export function CategoryBadge({ category }) {
   if (!category) return <span className="text-slate-400">—</span>
   return (
-    <span className="badge bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+    <span className="badge bg-slate-100 text-slate-700 dark:bg-navy-800 dark:text-slate-300">
       {CATEGORY_LABELS[category] || category}
     </span>
   )

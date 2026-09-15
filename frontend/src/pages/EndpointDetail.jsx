@@ -585,7 +585,7 @@ export default function EndpointDetail() {
 
       {/* ------------------------------------------------------- tabs */}
       <div
-        className="mb-4 flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800"
+        className="mb-4 flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-navy-800"
         role="tablist"
       >
         {TABS.map((item) => (
@@ -839,7 +839,7 @@ export default function EndpointDetail() {
               description="This endpoint has not failed long enough to open one."
             />
           ) : (
-            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+            <div className="divide-y divide-slate-100 dark:divide-navy-800">
               {incidents.items.map((incident) => (
                 <div key={incident.id} className="p-4">
                   <div className="flex flex-wrap items-center gap-2">
@@ -895,13 +895,13 @@ export default function EndpointDetail() {
                   </dl>
 
                   {incident.error_message ? (
-                    <p className="mt-2 rounded bg-slate-50 px-2 py-1.5 font-mono text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                    <p className="mt-2 rounded bg-slate-50 px-2 py-1.5 font-mono text-xs text-slate-600 dark:bg-navy-800 dark:text-slate-300">
                       {incident.error_message}
                     </p>
                   ) : null}
 
                   {incident.timeline?.length ? (
-                    <ol className="mt-2 space-y-1 border-l-2 border-slate-200 pl-3 dark:border-slate-700">
+                    <ol className="mt-2 space-y-1 border-l-2 border-slate-200 pl-3 dark:border-navy-700">
                       {incident.timeline.map((entry, index) => (
                         <li key={index} className="text-xs text-slate-500">
                           <span className="font-medium text-slate-700 dark:text-slate-300">
@@ -982,7 +982,7 @@ export default function EndpointDetail() {
                             className={clsx(
                               'badge',
                               row.scope === 'public'
-                                ? 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                                ? 'bg-slate-100 text-slate-700 dark:bg-navy-800 dark:text-slate-300'
                                 : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
                             )}
                           >
@@ -1240,7 +1240,7 @@ export default function EndpointDetail() {
             </DetailRow>
             <DetailRow label="Custom headers">
               {endpoint.custom_headers && Object.keys(endpoint.custom_headers).length ? (
-                <pre className="overflow-x-auto rounded bg-slate-50 p-2 font-mono text-[11px] dark:bg-slate-800">
+                <pre className="overflow-x-auto rounded bg-slate-50 p-2 font-mono text-[11px] dark:bg-navy-800">
                   {JSON.stringify(endpoint.custom_headers, null, 2)}
                 </pre>
               ) : null}

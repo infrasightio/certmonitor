@@ -85,7 +85,7 @@ export default function InfraSearch() {
             <button
               key={example}
               type="button"
-              className="chip transition-colors hover:bg-brand-100 dark:hover:bg-slate-700"
+              className="chip transition-colors hover:bg-brand-100 dark:hover:bg-navy-700"
               onClick={() => run(example)}
             >
               {example}
@@ -107,7 +107,7 @@ export default function InfraSearch() {
               className={clsx(
                 'mb-2 flex items-start gap-1.5 rounded-lg px-3 py-2 text-sm',
                 result.understood
-                  ? 'bg-slate-50 text-slate-700 dark:bg-slate-800 dark:text-slate-200'
+                  ? 'bg-slate-50 text-slate-700 dark:bg-navy-800 dark:text-slate-200'
                   : 'bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200',
               )}
             >

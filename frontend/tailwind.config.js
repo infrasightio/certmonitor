@@ -81,6 +81,31 @@ export default {
         },
 
         /*
+         * Dark mode's surfaces. A separate family, not the deep end of
+         * `slate`, because the two modes want different hues and one ramp
+         * cannot hold both: `slate-900` is dark mode's card AND light mode's
+         * heading ink, so pushing it blue enough to make a navy dark theme
+         * would have turned every heading in light mode navy as a side
+         * effect. Splitting them keeps each mode's decision its own.
+         *
+         * `slate` therefore now means: text in both modes, surfaces in light.
+         * `navy` means: surfaces in dark, and nothing else.
+         *
+         * Blue at low lightness reads softer than a neutral of the same
+         * value - it is the same reason a night-shift room is lit blue rather
+         * than grey. The steps are wide enough to carry elevation on their
+         * own, which they have to: a dark shadow on a dark surface is
+         * nothing, so page -> card -> dialog is the only depth cue dark gets.
+         */
+        navy: {
+          600: '#45557a',
+          700: '#2e3c58',
+          800: '#1e2942',
+          900: '#121c2f',
+          950: '#0b1322',
+        },
+
+        /*
          * Cobalt indigo. Deliberately NOT the blue Tailwind ships by default:
          * that blue is also the semantic "in progress / informational" colour
          * in this product, and an accent that matches a status colour makes
@@ -112,7 +137,7 @@ export default {
         up: { DEFAULT: '#15803d', soft: '#dcfce7', dark: '#14532d' },
         down: { DEFAULT: '#dc2626', soft: '#fee2e2', dark: '#7f1d1d' },
         warn: { DEFAULT: '#c2700a', soft: '#fef3c7', dark: '#78350f' },
-        unknown: { DEFAULT: '#5e6880', soft: '#e6e9f0', dark: '#3b4351' },
+        unknown: { DEFAULT: '#5e6880', soft: '#e6e9f0', dark: '#2e3c58' },
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],

@@ -16,7 +16,7 @@ export const CHANGE_STATUS_LABELS = {
 // Status carries meaning, so it is never conveyed by colour alone - the label
 // is always rendered alongside.
 const STATUS_STYLE = {
-  draft: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+  draft: 'bg-slate-100 text-slate-700 dark:bg-navy-800 dark:text-slate-300',
   pending_approval:
     'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
   approved: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
@@ -25,7 +25,7 @@ const STATUS_STYLE = {
     'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300',
   completed: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
   failed: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
-  cancelled: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
+  cancelled: 'bg-slate-100 text-slate-500 dark:bg-navy-800 dark:text-slate-400',
 }
 
 export function ChangeStatusBadge({ status, size = 'md' }) {
@@ -50,7 +50,7 @@ export function ChangeStatusBadge({ status, size = 'md' }) {
 }
 
 const RISK_STYLE = {
-  low: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+  low: 'bg-slate-100 text-slate-700 dark:bg-navy-800 dark:text-slate-300',
   medium: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
   high: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
 }

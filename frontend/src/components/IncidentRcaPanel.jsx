@@ -81,7 +81,7 @@ export default function IncidentRcaPanel({ incidentId, canWrite, teams = [] }) {
 
   if (loading) {
     return (
-      <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+      <div className="rounded-lg border border-slate-200 p-3 dark:border-navy-700">
         <Spinner size={16} />
       </div>
     )
@@ -90,8 +90,8 @@ export default function IncidentRcaPanel({ incidentId, canWrite, teams = [] }) {
   const status = rca?.status || 'not_requested'
 
   return (
-    <div className="rounded-lg border border-slate-200 dark:border-slate-700">
-      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-3 py-2 dark:border-slate-700">
+    <div className="rounded-lg border border-slate-200 dark:border-navy-700">
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-3 py-2 dark:border-navy-700">
         <span className="flex items-center gap-1.5 text-sm font-semibold text-slate-800 dark:text-slate-100">
           <FileSearch size={15} /> Root cause analysis
         </span>
@@ -191,7 +191,7 @@ export default function IncidentRcaPanel({ incidentId, canWrite, teams = [] }) {
       </div>
 
       {/* ---------------------------------------------------- comments */}
-      <div className="border-t border-slate-200 px-3 py-2.5 dark:border-slate-700">
+      <div className="border-t border-slate-200 px-3 py-2.5 dark:border-navy-700">
         <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
           <MessageSquare size={13} /> Comments ({comments.length})
         </p>

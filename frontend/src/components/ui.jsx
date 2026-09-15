@@ -31,8 +31,8 @@ const STATUS_BADGE = {
   up: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
   down: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
   degraded: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
-  unknown: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
-  paused: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+  unknown: 'bg-slate-100 text-slate-700 dark:bg-navy-800 dark:text-slate-300',
+  paused: 'bg-slate-100 text-slate-600 dark:bg-navy-800 dark:text-slate-400',
 }
 
 /**
@@ -70,8 +70,8 @@ const SSL_BADGE = {
   critical: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300',
   expired: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
   invalid: 'bg-red-100 text-red-900 dark:bg-red-900/50 dark:text-red-200',
-  unable_to_check: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
-  not_applicable: 'bg-slate-50 text-slate-500 dark:bg-slate-900 dark:text-slate-500',
+  unable_to_check: 'bg-slate-100 text-slate-700 dark:bg-navy-800 dark:text-slate-300',
+  not_applicable: 'bg-slate-50 text-slate-500 dark:bg-navy-900 dark:text-slate-500',
 }
 
 export function SslBadge({ status }) {
@@ -248,7 +248,7 @@ export function Toggle({ checked, onChange, label, description, disabled }) {
     >
       <input
         type="checkbox"
-        className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800"
+        className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-navy-600 dark:bg-navy-800"
         checked={Boolean(checked)}
         disabled={disabled}
         onChange={(event) => onChange(event.target.checked)}
@@ -350,7 +350,7 @@ export function TagInput({ value = [], onChange, suggestions = [], placeholder =
 
   return (
     <div>
-      <div className="flex min-h-[38px] flex-wrap items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-800">
+      <div className="flex min-h-[38px] flex-wrap items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2 py-1.5 dark:border-navy-700 dark:bg-navy-800">
         {value.map((name) => (
           <TagChip
             key={name}
@@ -443,7 +443,7 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/45 p-4 backdrop-blur-sm sm:items-center"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-navy-950/50 p-4 backdrop-blur-sm sm:items-center"
       role="dialog"
       aria-modal="true"
       aria-label={title}
@@ -455,7 +455,7 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }) {
         ref={ref}
         tabIndex={-1}
         className={clsx(
-          'my-4 w-full rounded-xl border border-slate-200 bg-white shadow-pop dark:border-slate-700 dark:bg-slate-900',
+          'my-4 w-full rounded-xl border border-slate-200 bg-white shadow-pop dark:border-navy-700 dark:bg-navy-900',
           widths[size],
         )}
       >
@@ -463,7 +463,7 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }) {
           <h2 className="card-title">{title}</h2>
           <button
             type="button"
-            className="-mr-1 rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-200/70 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-100"
+            className="-mr-1 rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-200/70 hover:text-slate-700 dark:hover:bg-navy-700 dark:hover:text-slate-100"
             onClick={onClose}
             aria-label="Close dialog"
           >
@@ -472,7 +472,7 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }) {
         </header>
         <div className="max-h-[70vh] overflow-y-auto px-4 py-4">{children}</div>
         {footer ? (
-          <footer className="flex flex-wrap items-center justify-end gap-2 rounded-b-xl border-t border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
+          <footer className="flex flex-wrap items-center justify-end gap-2 rounded-b-xl border-t border-slate-200 bg-slate-50 px-4 py-3 dark:border-navy-800 dark:bg-navy-900">
             {footer}
           </footer>
         ) : null}
@@ -527,7 +527,7 @@ export function Pagination({ meta, onPageChange, onPageSizeChange }) {
   const last = Math.min(page * page_size, total)
 
   return (
-    <div className="flex flex-col gap-2 rounded-b-xl border-t border-slate-200 bg-slate-50 px-3 py-2.5 text-sm dark:border-slate-800 dark:bg-slate-900 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-2 rounded-b-xl border-t border-slate-200 bg-slate-50 px-3 py-2.5 text-sm dark:border-navy-800 dark:bg-navy-900 sm:flex-row sm:items-center sm:justify-between">
       <p className="tnum text-slate-500 dark:text-slate-400">
         {total === 0 ? 'No results' : `${first}–${last} of ${total.toLocaleString()}`}
       </p>
@@ -617,7 +617,7 @@ export function CountChip({ label, value, tone, active, onClick }) {
     warn: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-300',
     bad: 'border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/50 dark:text-red-300',
     neutral:
-      'border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
+      'border-slate-200 bg-white text-slate-700 dark:border-navy-700 dark:bg-navy-900 dark:text-slate-300',
   }
   return (
     <button
@@ -688,7 +688,7 @@ export function Clamp({ width = '16rem', title, className, children }) {
 /** Definition-list row for the many detail panels. */
 export function DetailRow({ label, children, mono = false }) {
   return (
-    <div className="flex flex-col gap-0.5 border-b border-slate-100 py-2 last:border-0 sm:flex-row sm:gap-4 dark:border-slate-800">
+    <div className="flex flex-col gap-0.5 border-b border-slate-100 py-2 last:border-0 sm:flex-row sm:gap-4 dark:border-navy-800">
       <dt className="w-full shrink-0 text-xs font-medium text-slate-500 sm:w-52 dark:text-slate-400">
         {label}
       </dt>

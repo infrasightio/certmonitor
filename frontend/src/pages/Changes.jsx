@@ -54,7 +54,7 @@ function Tile({ icon: Icon, label, value, tone = 'neutral', onClick, active }) {
         active && 'ring-2 ring-brand-500',
       )}
     >
-      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-slate-100 dark:bg-slate-800">
+      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-slate-100 dark:bg-navy-800">
         <Icon size={17} className={tones[tone]} />
       </span>
       <span className="min-w-0">
@@ -279,7 +279,7 @@ export default function Changes() {
               <CalendarClock size={15} /> Upcoming deployments
             </h2>
           </div>
-          <div className="divide-y divide-slate-100 dark:divide-slate-800">
+          <div className="divide-y divide-slate-100 dark:divide-navy-800">
             {summary.upcoming.slice(0, 5).map((change) => (
               <div
                 key={change.id}
@@ -309,7 +309,7 @@ export default function Changes() {
 
       {/* -------------------------------------------------------- tabs */}
       <div
-        className="mb-3 flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800"
+        className="mb-3 flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-navy-800"
         role="tablist"
       >
         {TABS.map((item) => (
