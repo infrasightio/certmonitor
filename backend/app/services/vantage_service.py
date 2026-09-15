@@ -82,6 +82,12 @@ _INCONCLUSIVE_REASONS = frozenset(
 class VantagePoint:
     name: str
     proxy: str
+    # The ISO country this exit is SUPPOSED to be in, if the operator says so.
+    # Declared rather than guessed from `name`: a label is free text, and
+    # inferring a country from it can only ever be a heuristic that is
+    # sometimes wrong in both directions. Unset means the observed exit is
+    # reported without any claim about whether it is the intended one.
+    country: str | None = None
 
 
 @dataclass
@@ -158,10 +164,12 @@ def configured() -> list[VantagePoint]:
         proxy = str(entry.get("proxy") or "").strip()
         if not proxy:
             continue
+        country = str(entry.get("country") or "").strip().upper()[:8] or None
         points.append(
             VantagePoint(
                 name=str(entry.get("name") or proxy)[:64],
                 proxy=proxy,
+                country=country,
             )
         )
     return points
@@ -411,27 +419,52 @@ async def refresh_status(session: AsyncSession, *, observed_by: str | None = Non
     return len(points)
 
 
-async def current_status(session: AsyncSession) -> list[VantageStatus]:
-    """Every configured vantage, whether or not it has been observed yet."""
+async def current_status(session: AsyncSession) -> list[dict[str, Any]]:
+    """Every configured vantage, merged with whatever was last observed of it.
+
+    Returns plain dictionaries rather than rows because half of each answer
+    comes from the configuration and half from the database: the expected
+    country is config (the operator declared it), the observed one is an
+    observation. Keeping the expected side out of the table means there is no
+    column to migrate when someone edits their environment, and no possibility
+    of the two disagreeing about what was asked for.
+
+    Driven by the configuration, so a vantage that has never answered still
+    appears - "configured but never reached" is the most important state this
+    screen can show, and a missing row would render as nothing at all.
+    """
     rows = {
         row.name: row
         for row in (
             await session.execute(select(VantageStatus).order_by(VantageStatus.name))
         ).scalars().all()
     }
-    # Driven by the configuration, so a vantage that has never answered still
-    # appears - "configured but never reached" is the most important state this
-    # screen can show, and a missing row would render as nothing at all.
-    result: list[VantageStatus] = []
+
+    result: list[dict[str, Any]] = []
     for point in configured():
         row = rows.get(point.name)
-        if row is None:
-            row = VantageStatus(
-                name=point.name,
-                proxy=point.proxy[:255],
-                reachable=False,
-                error="Not observed yet.",
-                checked_at=datetime.now(timezone.utc),
-            )
-        result.append(row)
+        observed_country = (row.observed_country if row else None) or None
+        result.append(
+            {
+                "name": point.name,
+                "proxy": point.proxy[:255],
+                "expected_country": point.country,
+                "reachable": bool(row.reachable) if row else False,
+                "observed_ip": row.observed_ip if row else None,
+                "observed_country": observed_country,
+                "observed_city": row.observed_city if row else None,
+                # Only ever a real comparison of two declared values. With no
+                # expected country there is nothing to disagree with, so
+                # nothing is claimed - which is the case the previous version
+                # got wrong by guessing the intent from the label.
+                "country_mismatch": bool(
+                    point.country
+                    and observed_country
+                    and point.country.upper() != observed_country.upper()
+                ),
+                "error": (row.error if row else "Not observed yet."),
+                "checked_at": row.checked_at if row else None,
+                "observed_by": row.observed_by if row else None,
+            }
+        )
     return result

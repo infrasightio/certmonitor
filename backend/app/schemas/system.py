@@ -156,12 +156,15 @@ class VantageUsage(BaseModel):
 
     name: str
     proxy: str | None = None
+    expected_country: str | None = None
     reachable: bool = False
     observed_ip: str | None = None
     observed_country: str | None = None
     observed_city: str | None = None
+    country_mismatch: bool = False
     error: str | None = None
     checked_at: datetime | None = None
+    observed_by: str | None = None
 
 
 class ResourceSnapshot(BaseModel):

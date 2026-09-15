@@ -713,7 +713,7 @@ reach — a Tor SocksPort, a VPN container exposing SOCKS — that lets the same
 check leave by a different route.
 
 ```
-VANTAGE_POINTS=[{"name":"Germany","proxy":"socks5://tor-de:9050"}, ...]
+VANTAGE_POINTS=[{"name":"Germany","proxy":"socks5://tor-de:9050","country":"DE"}, ...]
 ```
 
 `docker-compose.yml` ships three free ones (`tor-de`, `tor-us`, `tor-sg`), one

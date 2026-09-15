@@ -149,6 +149,23 @@ function ProcessCard({ icon: Icon, title, subtitle, stats, extra }) {
   )
 }
 
+/**
+ * "DE" -> "Germany".
+ *
+ * `Intl.DisplayNames` is in the browser already and knows every region, which
+ * beats shipping a lookup table that goes stale. It throws on an unexpected
+ * code and is absent on old engines, so the raw code is the fallback - a
+ * two-letter country is still readable, where a crashed panel is not.
+ */
+function countryLabel(code) {
+  if (!code) return 'reachable'
+  try {
+    return new Intl.DisplayNames(['en'], { type: 'region' }).of(code) || code
+  } catch {
+    return code
+  }
+}
+
 export default function SystemResources() {
   const branding = useBranding()
   const [data, setData] = useState(null)
@@ -555,78 +572,96 @@ export default function SystemResources() {
           bodyClassName="p-0"
         >
           <p className="border-b border-slate-100 px-4 py-2.5 text-xs text-slate-500 dark:border-navy-800 dark:text-slate-400">
-            Extra places a failing endpoint is re-checked from before an
-            incident is opened. <strong>Observed</strong> is where the traffic
-            actually came out — the name is only a label, and an exit falls back
-            to another country when the requested one is unavailable.
+            Where a failing endpoint is re-checked from before an incident is
+            opened. <strong>Observed exit</strong> is where the traffic actually
+            came out, which is not always where it was asked to go — an exit
+            falls back to another country when the requested one has none
+            available. Set <code className="font-mono">country</code> on a
+            vantage in <code className="font-mono">VANTAGE_POINTS</code> to have
+            that fallback flagged here.
           </p>
           <div className="table-wrap">
             <table className="table">
               <thead>
                 <tr>
-                  <th>Name</th>
+                  <th>Vantage</th>
                   <th>Observed exit</th>
-                  <th>Address</th>
-                  <th>Proxy</th>
+                  <th>Exit address</th>
                   <th>Checked</th>
                 </tr>
               </thead>
               <tbody>
-                {vantages.map((vantage) => {
-                  // The label and the reality, compared. A vantage called
-                  // "Germany" exiting in Romania is the case this table exists
-                  // to surface rather than quietly pass off as Germany.
-                  const country = vantage.observed_country
-                  const mismatch =
-                    vantage.reachable &&
-                    country &&
-                    !vantage.name.toLowerCase().includes(country.toLowerCase())
-                  return (
-                    <tr key={vantage.name}>
-                      <td className="font-medium text-slate-800 dark:text-slate-100">
+                {vantages.map((vantage) => (
+                  <tr key={vantage.name}>
+                    <td>
+                      <span className="font-medium text-slate-800 dark:text-slate-100">
                         {vantage.name}
-                      </td>
-                      <td>
-                        {vantage.reachable ? (
-                          <span className="flex flex-wrap items-center gap-1.5">
-                            <span className="badge bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300">
-                              {country || 'reachable'}
-                            </span>
-                            {vantage.observed_city ? (
-                              <span className="text-xs text-slate-500 dark:text-slate-400">
-                                {vantage.observed_city}
-                              </span>
-                            ) : null}
-                            {mismatch ? (
-                              <span
-                                className="badge bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
-                                title={`Configured as "${vantage.name}" but exiting in ${country}`}
-                              >
-                                not {vantage.name}
-                              </span>
-                            ) : null}
+                      </span>
+                      {/* The proxy sits with the name rather than in a column
+                          of its own: it says which container answers for this
+                          vantage, which is what you need when one of them is
+                          the problem, and it is noise the rest of the time. */}
+                      <span className="block font-mono text-[11px] text-slate-400">
+                        {vantage.proxy || '—'}
+                        {vantage.expected_country
+                          ? ` · expects ${vantage.expected_country}`
+                          : ''}
+                      </span>
+                    </td>
+                    <td>
+                      {vantage.reachable ? (
+                        <span className="flex flex-wrap items-center gap-1.5">
+                          <span className="badge bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300">
+                            <span
+                              className="h-1.5 w-1.5 rounded-full bg-green-500"
+                              aria-hidden="true"
+                            />
+                            {countryLabel(vantage.observed_country)}
                           </span>
-                        ) : (
-                          <span
-                            className="badge bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300"
-                            title={vantage.error || undefined}
-                          >
+                          {vantage.observed_city ? (
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                              {vantage.observed_city}
+                            </span>
+                          ) : null}
+                          {/* Only on a real disagreement between two declared
+                              values. With no expected country configured there
+                              is nothing to disagree with, so nothing is
+                              claimed - which is what the first version of this
+                              got wrong by guessing the intent from the label. */}
+                          {vantage.country_mismatch ? (
+                            <span className="badge bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                              asked for {countryLabel(vantage.expected_country)}
+                            </span>
+                          ) : null}
+                        </span>
+                      ) : (
+                        <span className="flex flex-wrap items-center gap-1.5">
+                          <span className="badge bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300">
+                            <span
+                              className="h-1.5 w-1.5 rounded-full bg-red-500"
+                              aria-hidden="true"
+                            />
                             unreachable
                           </span>
-                        )}
-                      </td>
-                      <td className="font-mono text-xs text-slate-600 dark:text-slate-300">
-                        {vantage.observed_ip || '—'}
-                      </td>
-                      <td className="font-mono text-xs text-slate-500 dark:text-slate-400">
-                        {vantage.proxy || '—'}
-                      </td>
-                      <td className="whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">
-                        {vantage.checked_at ? formatRelative(vantage.checked_at) : '—'}
-                      </td>
-                    </tr>
-                  )
-                })}
+                          {/* Shown, not hidden in a tooltip: "why can this
+                              vantage not be used" is the whole reason to look
+                              at this row. */}
+                          {vantage.error ? (
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                              {vantage.error}
+                            </span>
+                          ) : null}
+                        </span>
+                      )}
+                    </td>
+                    <td className="font-mono text-xs text-slate-600 dark:text-slate-300">
+                      {vantage.observed_ip || '—'}
+                    </td>
+                    <td className="whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">
+                      {vantage.checked_at ? formatRelative(vantage.checked_at) : 'never'}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

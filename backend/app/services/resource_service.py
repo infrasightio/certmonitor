@@ -388,19 +388,9 @@ async def vantage_stats(session: AsyncSession) -> list[dict[str, Any]]:
         logger.warning("vantage_stats_failed", error=str(exc)[:200])
         return []
 
-    return [
-        {
-            "name": row.name,
-            "proxy": row.proxy,
-            "reachable": row.reachable,
-            "observed_ip": row.observed_ip,
-            "observed_country": row.observed_country,
-            "observed_city": row.observed_city,
-            "error": row.error,
-            "checked_at": row.checked_at,
-        }
-        for row in rows
-    ]
+    # Already dictionaries: current_status merges the configured side of each
+    # vantage with the observed side, so there is nothing to unpack here.
+    return rows
 
 
 # ----------------------------------------------------------------- worker

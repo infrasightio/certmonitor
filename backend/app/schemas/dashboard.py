@@ -256,10 +256,16 @@ class VantagePointStatus(BaseModel):
 
     name: str
     proxy: str | None = None
+    # What the operator declared this exit should be, from VANTAGE_POINTS.
+    # Null where they did not say, in which case nothing is claimed about
+    # whether the observed exit is the intended one.
+    expected_country: str | None = None
     reachable: bool = False
     observed_ip: str | None = None
     observed_country: str | None = None
     observed_city: str | None = None
+    # A real comparison of two declared values, never a guess from the label.
+    country_mismatch: bool = False
     error: str | None = None
     checked_at: datetime | None = None
     observed_by: str | None = None

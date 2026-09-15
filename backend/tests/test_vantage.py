@@ -277,8 +277,6 @@ class TestIncidentWithholding:
 
         assert recorded.incident_opened is not None
         assert recorded.incident_withheld_reason is None
-
-
 class TestObservedStatus:
     """Turning the label into a fact.
 
@@ -286,56 +284,133 @@ class TestObservedStatus:
     StrictNodes 0 so it falls back to another country rather than failing, so a
     vantage labelled "Germany" can quietly answer from elsewhere - and without
     an observed exit recorded beside the name, nothing would ever say so.
+
+    `current_status` returns dictionaries rather than rows: half of each answer
+    is configuration (the expected country) and half is observation (what the
+    exit reported), so there is no single row that holds both.
     """
 
     @staticmethod
-    def _configure(monkeypatch, names):
+    def _configure(monkeypatch, points):
+        """`points` is a list of (name, expected_country | None)."""
         monkeypatch.setattr(vantage_service.settings, "VANTAGE_ENABLED", True)
         monkeypatch.setattr(
             vantage_service.settings,
             "VANTAGE_POINTS",
             json.dumps(
-                [{"name": name, "proxy": f"socks5://{name}:9050"} for name in names]
+                [
+                    {
+                        "name": name,
+                        "proxy": f"socks5://{name}:9050",
+                        **({"country": country} if country else {}),
+                    }
+                    for name, country in points
+                ]
             ),
         )
 
-    async def test_an_unobserved_vantage_still_appears(
-        self, session, monkeypatch
-    ):
+    @staticmethod
+    def _observer(**observed):
+        async def _observe(point):
+            return {"reachable": True, **observed}
+
+        return _observe
+
+    async def test_an_unobserved_vantage_still_appears(self, session, monkeypatch):
         """"Configured but never reached" is the most useful state this screen
         can report, and a missing row would render as nothing at all."""
-        self._configure(monkeypatch, ["Germany"])
+        self._configure(monkeypatch, [("Germany", "DE")])
 
         rows = await vantage_service.current_status(session)
 
-        assert [row.name for row in rows] == ["Germany"]
-        assert rows[0].reachable is False
-        assert rows[0].error == "Not observed yet."
+        assert [row["name"] for row in rows] == ["Germany"]
+        assert rows[0]["reachable"] is False
+        assert rows[0]["error"] == "Not observed yet."
+        assert rows[0]["checked_at"] is None
+        # Nothing has been observed, so nothing can be said to disagree.
+        assert rows[0]["country_mismatch"] is False
 
     async def test_the_observation_is_recorded(self, session, monkeypatch):
-        self._configure(monkeypatch, ["Germany"])
+        self._configure(monkeypatch, [("Germany", "DE")])
+        monkeypatch.setattr(
+            vantage_service,
+            "_observe",
+            self._observer(
+                observed_ip="185.220.101.29",
+                observed_country="DE",
+                observed_city="Brandenburg",
+            ),
+        )
 
-        async def _observe(point):
-            return {
-                "reachable": True,
-                "observed_ip": "85.214.10.20",
-                "observed_country": "DE",
-                "observed_city": "Frankfurt",
-                "error": None,
-            }
-
-        monkeypatch.setattr(vantage_service, "_observe", _observe)
         assert await vantage_service.refresh_status(session, observed_by="w1") == 1
         await session.commit()
 
-        rows = await vantage_service.current_status(session)
-        assert rows[0].observed_country == "DE"
-        assert rows[0].observed_ip == "85.214.10.20"
-        assert rows[0].reachable is True
-        assert rows[0].observed_by == "w1"
+        row = (await vantage_service.current_status(session))[0]
+        assert row["observed_country"] == "DE"
+        assert row["observed_ip"] == "185.220.101.29"
+        assert row["observed_city"] == "Brandenburg"
+        assert row["reachable"] is True
+        assert row["observed_by"] == "w1"
+
+    async def test_a_matching_country_is_not_a_mismatch(self, session, monkeypatch):
+        """The bug this replaced compared an ISO code against a human name by
+        substring - "germany".includes("de") is false, so every healthy vantage
+        was flagged as having fallen back."""
+        self._configure(monkeypatch, [("Germany", "DE")])
+        monkeypatch.setattr(
+            vantage_service, "_observe", self._observer(observed_country="DE")
+        )
+        await vantage_service.refresh_status(session)
+        await session.commit()
+
+        assert (await vantage_service.current_status(session))[0][
+            "country_mismatch"
+        ] is False
+
+    async def test_case_does_not_make_a_mismatch(self, session, monkeypatch):
+        self._configure(monkeypatch, [("Germany", "de")])
+        monkeypatch.setattr(
+            vantage_service, "_observe", self._observer(observed_country="DE")
+        )
+        await vantage_service.refresh_status(session)
+        await session.commit()
+
+        assert (await vantage_service.current_status(session))[0][
+            "country_mismatch"
+        ] is False
+
+    async def test_a_real_fallback_is_flagged(self, session, monkeypatch):
+        """The case the whole table exists for: asked for Germany, exited in
+        Romania, and nothing else in the product would have said so."""
+        self._configure(monkeypatch, [("Germany", "DE")])
+        monkeypatch.setattr(
+            vantage_service, "_observe", self._observer(observed_country="RO")
+        )
+        await vantage_service.refresh_status(session)
+        await session.commit()
+
+        row = (await vantage_service.current_status(session))[0]
+        assert row["country_mismatch"] is True
+        assert row["expected_country"] == "DE"
+        assert row["observed_country"] == "RO"
+
+    async def test_no_expected_country_claims_nothing(self, session, monkeypatch):
+        """Without a declared expectation there is nothing to disagree with, so
+        the exit is reported and no judgement is offered."""
+        self._configure(monkeypatch, [("Somewhere", None)])
+        monkeypatch.setattr(
+            vantage_service, "_observe", self._observer(observed_country="RO")
+        )
+        await vantage_service.refresh_status(session)
+        await session.commit()
+
+        row = (await vantage_service.current_status(session))[0]
+        assert row["expected_country"] is None
+        assert row["country_mismatch"] is False
+        assert row["observed_country"] == "RO"
 
     async def test_an_unreachable_exit_records_why(self, session, monkeypatch):
-        self._configure(monkeypatch, ["Germany"])
+        self._configure(monkeypatch, [("Germany", "DE")])
 
         async def _observe(point):
             return {"reachable": False, "error": "All exits are down."}
@@ -344,15 +419,15 @@ class TestObservedStatus:
         await vantage_service.refresh_status(session)
         await session.commit()
 
-        rows = await vantage_service.current_status(session)
-        assert rows[0].reachable is False
-        assert rows[0].error == "All exits are down."
+        row = (await vantage_service.current_status(session))[0]
+        assert row["reachable"] is False
+        assert row["error"] == "All exits are down."
 
     async def test_a_raising_observation_does_not_lose_the_round(
         self, session, monkeypatch
     ):
         """One broken proxy must not stop the other vantages being recorded."""
-        self._configure(monkeypatch, ["Germany", "Singapore"])
+        self._configure(monkeypatch, [("Germany", "DE"), ("Singapore", "SG")])
 
         async def _observe(point):
             if point.name == "Germany":
@@ -363,39 +438,33 @@ class TestObservedStatus:
         await vantage_service.refresh_status(session)
         await session.commit()
 
-        rows = {row.name: row for row in await vantage_service.current_status(session)}
-        assert rows["Germany"].reachable is False
-        assert rows["Singapore"].observed_country == "SG"
+        rows = {row["name"]: row for row in await vantage_service.current_status(session)}
+        assert rows["Germany"]["reachable"] is False
+        assert rows["Singapore"]["observed_country"] == "SG"
 
     async def test_rows_follow_the_configuration(self, session, monkeypatch):
         """A vantage removed from the environment should not linger on the
         resources page as something that still exists."""
-        self._configure(monkeypatch, ["Germany", "Singapore"])
-
-        async def _observe(point):
-            return {"reachable": True, "observed_country": "XX"}
-
-        monkeypatch.setattr(vantage_service, "_observe", _observe)
+        self._configure(monkeypatch, [("Germany", "DE"), ("Singapore", "SG")])
+        monkeypatch.setattr(
+            vantage_service, "_observe", self._observer(observed_country="XX")
+        )
         await vantage_service.refresh_status(session)
         await session.commit()
         assert len(await vantage_service.current_status(session)) == 2
 
-        self._configure(monkeypatch, ["Germany"])
+        self._configure(monkeypatch, [("Germany", "DE")])
         await vantage_service.refresh_status(session)
         await session.commit()
 
         rows = await vantage_service.current_status(session)
-        assert [row.name for row in rows] == ["Germany"]
+        assert [row["name"] for row in rows] == ["Germany"]
 
-    async def test_removing_every_vantage_clears_the_table(
-        self, session, monkeypatch
-    ):
-        self._configure(monkeypatch, ["Germany"])
-
-        async def _observe(point):
-            return {"reachable": True, "observed_country": "DE"}
-
-        monkeypatch.setattr(vantage_service, "_observe", _observe)
+    async def test_removing_every_vantage_clears_the_table(self, session, monkeypatch):
+        self._configure(monkeypatch, [("Germany", "DE")])
+        monkeypatch.setattr(
+            vantage_service, "_observe", self._observer(observed_country="DE")
+        )
         await vantage_service.refresh_status(session)
         await session.commit()
 
