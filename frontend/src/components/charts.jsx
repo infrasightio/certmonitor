@@ -69,8 +69,8 @@ const CHROME = {
   // axis = slate-300, labels = slate-500, surface = the card the chart sits
   // on. Written as hex because Recharts takes colours as values, not classes -
   // if the ramp moves, these move with it.
-  light: { grid: '#dde1e9', axis: '#c5cbd8', muted: '#626c84', surface: '#ffffff' },
-  dark: { grid: '#262c38', axis: '#39404f', muted: '#7c859b', surface: '#171b24' },
+  light: { grid: '#d6dbe5', axis: '#bdc4d2', muted: '#5e6880', surface: '#f9fafc' },
+  dark: { grid: '#2a3039', axis: '#3b4351', muted: '#78829a', surface: '#1c2129' },
 }
 
 /** Tracks the `dark` class the layout toggles, so charts restep their colours. */
@@ -451,7 +451,7 @@ const STATUS_ORDER = [
   { key: 'degraded', label: 'Degraded', color: STATUS.warning },
   { key: 'down', label: 'Down', color: STATUS.critical },
   { key: 'unknown', label: 'Unknown', color: STATUS.neutral },
-  { key: 'paused', label: 'Paused', color: '#c5cbd8' },
+  { key: 'paused', label: 'Paused', color: '#bdc4d2' },
 ]
 
 /**

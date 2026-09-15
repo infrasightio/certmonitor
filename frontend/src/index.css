@@ -10,20 +10,24 @@
  * shade is "the page" and which is "a card". Anything structural reads these
  * variables; anything incidental reads a slate-* utility.
  *
- * LIGHT - the mode this was designed in:
+ * The four roles, in both modes:
  *
- *   sunken   the page ground       a cool off-white
- *   surface  cards, the shell      white
- *   muted    card and table heads  a whisper above the card
+ *   sunken   the page ground       under everything
+ *   surface  cards, the shell      the thing you read off
+ *   muted    card and table heads  one step off the surface
  *   border   every hairline
  *
- * A white page with white cards has no elevation to read: every surface sits
- * at the same value and the screen becomes one bright sheet. Dropping the page
- * a few percent and leaving cards white gives the panels something to lift
- * off, which is what keeps a dense operations screen legible for a whole
- * shift. The step is deliberately small - the previous ground was dark and
- * blue enough that the page read as the object and the cards as holes cut in
- * it.
+ * They are an ELEVATION ORDER, not four colours that happen to differ. Light
+ * runs sunken -> surface upward and dark runs it upward too, so "a card is
+ * raised off the page" is true in both, and a reader who learns the depth cue
+ * in one mode keeps it in the other.
+ *
+ * Neither mode goes to an extreme. In light, a white page with white cards
+ * has no elevation to read and glares for a whole shift, so the page drops a
+ * few percent and the surface is paper rather than #FFF. In dark, a
+ * near-black page makes light text halate and leaves nothing below it for a
+ * card to lift off, so the page sits at slate-950 and every surface above it
+ * steps up from there.
  */
 @layer base {
   :root {
@@ -33,35 +37,48 @@
        our white tables. */
     color-scheme: light;
 
-    --surface: 255 255 255;
-    --surface-raised: 255 255 255;
-    --surface-sunken: 241 244 249;
+    /* Paper - the `white` defined in tailwind.config.js, not #FFF. */
+    --surface: 249 250 252;
+    --surface-raised: 249 250 252;
+    --surface-sunken: 232 235 242;
     /* Exactly slate-50, so a `bg-slate-50` panel written inline and a card
        header written through a token land on the same value. There is one
        faint tint in this system, not two that nearly match. */
-    --surface-muted: 246 247 250;
+    --surface-muted: 242 244 248;
     /* slate-200. */
-    --border: 221 225 233;
+    --border: 214 219 229;
     /* A second, fainter rule for dividers INSIDE a panel - table rows, list
        items - so an internal separator never competes with the panel's own
-       edge. */
-    --border-subtle: 236 238 243;
-    --text: 23 27 36;
-    --text-muted: 98 108 132;
+       edge. slate-100. */
+    --border-subtle: 230 233 240;
+    --text: 28 33 41;
+    --text-muted: 94 104 128;
     --accent: 62 76 198;
   }
 
+  /*
+   * Dark is a dark room, not a void.
+   *
+   * The page sits at slate-950 rather than near-black: light text on black
+   * halates, and there is nowhere below black to put a page that a card has
+   * to lift off. Each step up the ramp is one level of elevation - page,
+   * card, dialog - so the same reading of depth works in both modes.
+   *
+   * Body text is slate-100 rather than white for the same reason. It still
+   * clears 13:1, which is plenty; the glow around white-on-black is what
+   * makes a dark screen tiring, not the absence of contrast.
+   */
   .dark {
     color-scheme: dark;
 
-    --surface: 23 27 36;
-    --surface-raised: 38 44 56;
-    --surface-sunken: 14 17 24;
-    --surface-muted: 38 44 56;
-    --border: 57 64 79;
-    --border-subtle: 38 44 56;
-    --text: 241 244 249;
-    --text-muted: 124 133 155;
+    --surface: 28 33 41;
+    --surface-raised: 42 48 57;
+    --surface-sunken: 18 21 28;
+    --surface-muted: 42 48 57;
+    --border: 59 67 81;
+    --border-subtle: 42 48 57;
+    --text: 230 233 240;
+    --text-muted: 120 130 154;
     --accent: 122 141 235;
   }
 
@@ -162,9 +179,11 @@
 @layer components {
   /* ------------------------------------------------------------ surfaces */
 
-  /* White against the cool ground, with a hairline AND a contact shadow.
+  /* Paper against the cool ground, with a hairline AND a contact shadow.
      Either alone is ambiguous at this little contrast: the border gives the
-     card a definite edge, the shadow says which side of it is on top. */
+     card a definite edge, the shadow says which side of it is on top. In dark
+     the shadow does nothing - a dark shadow on a dark surface never could -
+     so the step up the ramp and the border carry the elevation there. */
   .card {
     @apply rounded-xl border bg-white shadow-card dark:bg-slate-900;
     border-color: rgb(var(--border));

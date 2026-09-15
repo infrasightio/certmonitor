@@ -170,15 +170,15 @@ export const STATUS_COLORS = {
   up: '#16a34a',
   down: '#dc2626',
   degraded: '#d97706',
-  unknown: '#626c84',
-  paused: '#7c859b',
+  unknown: '#5e6880',
+  paused: '#78829a',
   valid: '#16a34a',
   expiring_soon: '#d97706',
   critical: '#ea580c',
   expired: '#dc2626',
   invalid: '#b91c1c',
-  unable_to_check: '#626c84',
-  not_applicable: '#c5cbd8',
+  unable_to_check: '#5e6880',
+  not_applicable: '#bdc4d2',
 }
 
 /** Deterministic colour for a tag name, so a tag looks the same everywhere.

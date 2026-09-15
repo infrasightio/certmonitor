@@ -31,7 +31,8 @@ const NotFound = lazy(() => import('./pages/NotFound'))
 
 function FullPageSpinner() {
   return (
-    <div className="grid min-h-screen place-items-center bg-slate-50 dark:bg-slate-950">
+    // No ground of its own - `body` paints it, in whichever mode is active.
+    <div className="grid min-h-screen place-items-center">
       <Spinner size={26} />
     </div>
   )

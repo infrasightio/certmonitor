@@ -63,7 +63,7 @@ export default function ChangePassword() {
   }
 
   return (
-    <div className="grid min-h-screen place-items-center bg-slate-100 px-4 py-10 dark:bg-slate-950">
+    <div className="grid min-h-screen place-items-center px-4 py-10">
       <div className="w-full max-w-md">
         <div className="mb-5 flex flex-col items-center gap-2 text-center">
           <span className="grid h-11 w-11 place-items-center rounded-xl bg-brand-600 text-white">

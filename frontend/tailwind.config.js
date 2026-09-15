@@ -10,11 +10,15 @@
  * to `brand`. Anything that needs a colour reaches for one of these two, or
  * for a semantic status colour - never for a raw hex.
  *
- * Designed light-first. The neutral is cool and low-chroma so the only
- * saturated things on an operations screen are the ones that mean something:
- * a red endpoint, an amber certificate, a green recovery. Dark mode is kept
- * working - the deep end of the same ramp supplies its surfaces - but the
- * light values are the ones that were tuned.
+ * The neutral is cool and low-chroma so the only saturated things on an
+ * operations screen are the ones that mean something: a red endpoint, an
+ * amber certificate, a green recovery.
+ *
+ * Both modes are tuned for a long shift rather than for a screenshot. Light
+ * is a shade off white so a wall of panels does not glare; dark is a dark
+ * room rather than a void, because light text on near-black halates and
+ * leaves nowhere to show elevation. One ramp serves both - its light end is
+ * light mode's surfaces and dark mode's text, its dark end the reverse.
  */
 export default {
   content: ['./index.html', './src/**/*.{js,jsx}'],
@@ -22,6 +26,20 @@ export default {
   theme: {
     extend: {
       colors: {
+        /*
+         * Paper, not paper-white.
+         *
+         * Cards, the shell, inputs and the sidebar are the largest areas on
+         * screen, and at #FFF they are the brightest thing in the room on a
+         * monitor someone stares at all day. Four percent off is invisible as
+         * a colour and noticeable as glare. Redefining `white` rather than
+         * introducing a `paper` token means every existing `bg-white` gets it
+         * without a sweep, and `text-white` on a brand or red fill softens by
+         * the same amount - which is the other place the product was
+         * brightest.
+         */
+        white: '#f9fafc',
+
         /*
          * Cool graphite. Lower chroma than stock Tailwind slate, which carries
          * enough blue to compete with the brand and to tint every white card
@@ -31,23 +49,35 @@ export default {
          * are dark-mode surfaces AND light-mode strong text, which is why the
          * step from 600 to 700 is larger than the others.
          *
-         * 400 is deliberately darker than Tailwind's (#94a3b8): it carries
-         * every hint, placeholder and empty state in the product, and at
-         * 2.8:1 those were the least readable text on screen. This is 3.7:1 -
-         * still obviously quiet, no longer a squint.
+         * The ramp is deliberately COMPRESSED at both ends, because the two
+         * ends are the two modes:
+         *
+         *  - the light end (50-300) sits a few percent down from where a
+         *    stock ramp puts it, so a screen of panels and dividers stops
+         *    glaring;
+         *  - the dark end (800-950) sits a few percent UP, so dark mode is a
+         *    dark room rather than a void. A near-black ground makes light
+         *    text halate and leaves no room to show elevation - 950 to 900 to
+         *    800 now steps far enough that a card reads as raised off the
+         *    page and a dialog as raised off the card.
+         *
+         * 400 is darker than Tailwind's (#94a3b8): it carries every hint,
+         * placeholder and empty state in the product, and at 2.8:1 those were
+         * the least readable text on screen. This is 3.7:1 - still obviously
+         * quiet, no longer a squint.
          */
         slate: {
-          50: '#f6f7fa',
-          100: '#eceef3',
-          200: '#dde1e9',
-          300: '#c5cbd8',
-          400: '#7c859b',
-          500: '#626c84',
-          600: '#4a5468',
-          700: '#39404f',
-          800: '#262c38',
-          900: '#171b24',
-          950: '#0e1118',
+          50: '#f2f4f8',
+          100: '#e6e9f0',
+          200: '#d6dbe5',
+          300: '#bdc4d2',
+          400: '#78829a',
+          500: '#5e6880',
+          600: '#475064',
+          700: '#3b4351',
+          800: '#2a3039',
+          900: '#1c2129',
+          950: '#12151c',
         },
 
         /*
@@ -82,7 +112,7 @@ export default {
         up: { DEFAULT: '#15803d', soft: '#dcfce7', dark: '#14532d' },
         down: { DEFAULT: '#dc2626', soft: '#fee2e2', dark: '#7f1d1d' },
         warn: { DEFAULT: '#c2700a', soft: '#fef3c7', dark: '#78350f' },
-        unknown: { DEFAULT: '#626c84', soft: '#eceef3', dark: '#39404f' },
+        unknown: { DEFAULT: '#5e6880', soft: '#e6e9f0', dark: '#3b4351' },
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
@@ -97,12 +127,12 @@ export default {
          * Tinted with the neutral's own hue rather than pure black, so a
          * shadow on the cool ground does not go grey-green.
          */
-        card: '0 1px 2px 0 rgb(23 27 36 / 0.04), 0 1px 3px -1px rgb(23 27 36 / 0.06)',
-        raised: '0 1px 2px 0 rgb(23 27 36 / 0.05), 0 6px 16px -6px rgb(23 27 36 / 0.12)',
-        pop: '0 2px 4px -1px rgb(23 27 36 / 0.06), 0 12px 28px -8px rgb(23 27 36 / 0.18)',
+        card: '0 1px 2px 0 rgb(28 33 41 / 0.04), 0 1px 3px -1px rgb(28 33 41 / 0.06)',
+        raised: '0 1px 2px 0 rgb(28 33 41 / 0.05), 0 6px 16px -6px rgb(28 33 41 / 0.12)',
+        pop: '0 2px 4px -1px rgb(28 33 41 / 0.06), 0 12px 28px -8px rgb(28 33 41 / 0.18)',
         // Primary buttons: the fill already carries the weight, so this is
         // only enough to lift it off the surface it sits on.
-        btn: '0 1px 2px 0 rgb(23 27 36 / 0.08)',
+        btn: '0 1px 2px 0 rgb(28 33 41 / 0.08)',
       },
       animation: {
         'pulse-slow': 'pulse 2.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
