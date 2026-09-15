@@ -722,6 +722,22 @@ SocksPorts on one instance would all leave through the same place. Point
 `VANTAGE_POINTS` at gluetun or anything else that speaks SOCKS instead; nothing
 in the application knows what is behind the proxy.
 
+**Where a vantage actually is.** The name is a label you typed, and
+`StrictNodes 0` means Tor falls back to another country rather than failing
+when the requested one has no exit available. So the worker re-observes each
+vantage's real exit on a slow loop (`VANTAGE_ECHO_URL`, every 15 minutes by
+default) and records the IP, country and city. **System Resources** shows them
+in a Vantage points table, and flags a vantage whose observed country does not
+match its name — the `StrictNodes 0` case you would otherwise never notice.
+Blank `VANTAGE_ECHO_URL` to stop asking anything external.
+
+**Which worker is where.** Workers are not per-region — one worker uses all the
+proxies. But `WORKER_REGION` labels a worker on its heartbeat and shows as a
+chip on its card, which matters the moment you run replicas in different
+places. Note that `--scale worker=3` gives every replica the same value; to
+label workers that genuinely sit apart, run them as separate services with a
+region each.
+
 **A verdict can only ever withhold an incident, never open one.** It is
 consulted on exactly one check per outage — the failing one that first reaches
 `failure_threshold`. If any vantage still reaches the endpoint, the incident is

@@ -35,13 +35,18 @@ import ipaddress
 import json
 import socket
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any
+
+from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.enums import CheckType, FailureReason
 from app.core.logging import get_logger
 from app.monitoring.checker import CheckTarget, run_check
 from app.models.endpoint import Endpoint
+from app.models.monitoring import VantageStatus
 
 logger = get_logger(__name__)
 
@@ -298,3 +303,135 @@ async def confirm(endpoint: Endpoint, config: dict[str, Any]) -> VantageVerdict:
         vantages=len(results),
     )
     return verdict
+
+
+# ------------------------------------------------------- observing the exits
+async def _observe(point: VantagePoint) -> dict[str, Any]:
+    """Ask a vantage where its traffic comes out.
+
+    One request to an echo service through the proxy. The answer is what makes
+    a vantage's name checkable rather than merely asserted - with
+    ``StrictNodes 0``, a vantage labelled "Germany" will quietly answer from
+    somewhere else whenever no German exit is available, and without this
+    nothing would ever say so.
+    """
+    import httpx
+
+    from app.monitoring import transport as transport_module
+
+    client = transport_module.build_async_client(
+        verify=True,
+        timeout=float(settings.VANTAGE_TIMEOUT_SECONDS),
+        follow_redirects=True,
+        proxy=point.proxy,
+    )
+    try:
+        response = await client.get(settings.VANTAGE_ECHO_URL)
+        response.raise_for_status()
+        payload = response.json()
+    except Exception as exc:
+        detail = str(exc).strip().splitlines()[0] if str(exc).strip() else type(exc).__name__
+        return {"reachable": False, "error": detail[:255]}
+    finally:
+        await client.aclose()
+
+    if not isinstance(payload, dict):
+        return {"reachable": False, "error": "The echo service returned no detail."}
+
+    # Field names differ between echo services, so the common spellings are
+    # accepted rather than pinning this to one provider.
+    def _first(*names: str) -> str | None:
+        for name in names:
+            value = payload.get(name)
+            if value:
+                return str(value)[:64]
+        return None
+
+    return {
+        "reachable": True,
+        "observed_ip": _first("ip", "query", "ip_addr", "origin"),
+        "observed_country": (_first("country_iso", "country_code", "countryCode", "country") or "")[:8]
+        or None,
+        "observed_city": _first("city"),
+        "error": None,
+    }
+
+
+async def refresh_status(session: AsyncSession, *, observed_by: str | None = None) -> int:
+    """Re-observe every configured vantage and record what it saw.
+
+    Called on a slow loop by the worker, not per check: an exit's location
+    changes when Tor rebuilds a circuit, not between one request and the next,
+    and this costs an external request per vantage each time.
+
+    Rows for vantages that are no longer configured are removed, so the table
+    follows the configuration rather than accumulating names nobody uses.
+    """
+    points = configured()
+    now = datetime.now(timezone.utc)
+
+    names = [point.name for point in points]
+    if names:
+        await session.execute(
+            delete(VantageStatus).where(VantageStatus.name.not_in(names))
+        )
+    else:
+        await session.execute(delete(VantageStatus))
+        await session.flush()
+        return 0
+
+    observations = await asyncio.gather(
+        *(_observe(point) for point in points), return_exceptions=True
+    )
+
+    for point, observed in zip(points, observations):
+        if isinstance(observed, BaseException):
+            observed = {"reachable": False, "error": str(observed)[:255]}
+
+        row = (
+            await session.execute(
+                select(VantageStatus).where(VantageStatus.name == point.name)
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            row = VantageStatus(name=point.name)
+            session.add(row)
+
+        row.proxy = point.proxy[:255]
+        row.reachable = bool(observed.get("reachable"))
+        row.observed_ip = observed.get("observed_ip")
+        row.observed_country = observed.get("observed_country")
+        row.observed_city = observed.get("observed_city")
+        row.error = observed.get("error")
+        row.checked_at = now
+        row.observed_by = (observed_by or "")[:64] or None
+
+    await session.flush()
+    logger.info("vantage_status_refreshed", vantages=len(points))
+    return len(points)
+
+
+async def current_status(session: AsyncSession) -> list[VantageStatus]:
+    """Every configured vantage, whether or not it has been observed yet."""
+    rows = {
+        row.name: row
+        for row in (
+            await session.execute(select(VantageStatus).order_by(VantageStatus.name))
+        ).scalars().all()
+    }
+    # Driven by the configuration, so a vantage that has never answered still
+    # appears - "configured but never reached" is the most important state this
+    # screen can show, and a missing row would render as nothing at all.
+    result: list[VantageStatus] = []
+    for point in configured():
+        row = rows.get(point.name)
+        if row is None:
+            row = VantageStatus(
+                name=point.name,
+                proxy=point.proxy[:255],
+                reachable=False,
+                error="Not observed yet.",
+                checked_at=datetime.now(timezone.utc),
+            )
+        result.append(row)
+    return result

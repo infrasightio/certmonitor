@@ -277,3 +277,176 @@ class TestIncidentWithholding:
 
         assert recorded.incident_opened is not None
         assert recorded.incident_withheld_reason is None
+
+
+class TestObservedStatus:
+    """Turning the label into a fact.
+
+    The name in VANTAGE_POINTS is something somebody typed. Tor runs with
+    StrictNodes 0 so it falls back to another country rather than failing, so a
+    vantage labelled "Germany" can quietly answer from elsewhere - and without
+    an observed exit recorded beside the name, nothing would ever say so.
+    """
+
+    @staticmethod
+    def _configure(monkeypatch, names):
+        monkeypatch.setattr(vantage_service.settings, "VANTAGE_ENABLED", True)
+        monkeypatch.setattr(
+            vantage_service.settings,
+            "VANTAGE_POINTS",
+            json.dumps(
+                [{"name": name, "proxy": f"socks5://{name}:9050"} for name in names]
+            ),
+        )
+
+    async def test_an_unobserved_vantage_still_appears(
+        self, session, monkeypatch
+    ):
+        """"Configured but never reached" is the most useful state this screen
+        can report, and a missing row would render as nothing at all."""
+        self._configure(monkeypatch, ["Germany"])
+
+        rows = await vantage_service.current_status(session)
+
+        assert [row.name for row in rows] == ["Germany"]
+        assert rows[0].reachable is False
+        assert rows[0].error == "Not observed yet."
+
+    async def test_the_observation_is_recorded(self, session, monkeypatch):
+        self._configure(monkeypatch, ["Germany"])
+
+        async def _observe(point):
+            return {
+                "reachable": True,
+                "observed_ip": "85.214.10.20",
+                "observed_country": "DE",
+                "observed_city": "Frankfurt",
+                "error": None,
+            }
+
+        monkeypatch.setattr(vantage_service, "_observe", _observe)
+        assert await vantage_service.refresh_status(session, observed_by="w1") == 1
+        await session.commit()
+
+        rows = await vantage_service.current_status(session)
+        assert rows[0].observed_country == "DE"
+        assert rows[0].observed_ip == "85.214.10.20"
+        assert rows[0].reachable is True
+        assert rows[0].observed_by == "w1"
+
+    async def test_an_unreachable_exit_records_why(self, session, monkeypatch):
+        self._configure(monkeypatch, ["Germany"])
+
+        async def _observe(point):
+            return {"reachable": False, "error": "All exits are down."}
+
+        monkeypatch.setattr(vantage_service, "_observe", _observe)
+        await vantage_service.refresh_status(session)
+        await session.commit()
+
+        rows = await vantage_service.current_status(session)
+        assert rows[0].reachable is False
+        assert rows[0].error == "All exits are down."
+
+    async def test_a_raising_observation_does_not_lose_the_round(
+        self, session, monkeypatch
+    ):
+        """One broken proxy must not stop the other vantages being recorded."""
+        self._configure(monkeypatch, ["Germany", "Singapore"])
+
+        async def _observe(point):
+            if point.name == "Germany":
+                raise RuntimeError("socket blew up")
+            return {"reachable": True, "observed_country": "SG"}
+
+        monkeypatch.setattr(vantage_service, "_observe", _observe)
+        await vantage_service.refresh_status(session)
+        await session.commit()
+
+        rows = {row.name: row for row in await vantage_service.current_status(session)}
+        assert rows["Germany"].reachable is False
+        assert rows["Singapore"].observed_country == "SG"
+
+    async def test_rows_follow_the_configuration(self, session, monkeypatch):
+        """A vantage removed from the environment should not linger on the
+        resources page as something that still exists."""
+        self._configure(monkeypatch, ["Germany", "Singapore"])
+
+        async def _observe(point):
+            return {"reachable": True, "observed_country": "XX"}
+
+        monkeypatch.setattr(vantage_service, "_observe", _observe)
+        await vantage_service.refresh_status(session)
+        await session.commit()
+        assert len(await vantage_service.current_status(session)) == 2
+
+        self._configure(monkeypatch, ["Germany"])
+        await vantage_service.refresh_status(session)
+        await session.commit()
+
+        rows = await vantage_service.current_status(session)
+        assert [row.name for row in rows] == ["Germany"]
+
+    async def test_removing_every_vantage_clears_the_table(
+        self, session, monkeypatch
+    ):
+        self._configure(monkeypatch, ["Germany"])
+
+        async def _observe(point):
+            return {"reachable": True, "observed_country": "DE"}
+
+        monkeypatch.setattr(vantage_service, "_observe", _observe)
+        await vantage_service.refresh_status(session)
+        await session.commit()
+
+        monkeypatch.setattr(vantage_service.settings, "VANTAGE_POINTS", "")
+        assert await vantage_service.refresh_status(session) == 0
+        await session.commit()
+
+        assert await vantage_service.current_status(session) == []
+
+
+class TestWorkerRegion:
+    async def test_the_region_is_reported_with_the_fleet(
+        self, client, admin_headers, session
+    ):
+        """What the resources page reads to say which worker is where."""
+        from datetime import datetime, timezone
+
+        from app.models.monitoring import WorkerHeartbeat
+
+        now = datetime.now(timezone.utc)
+        session.add(
+            WorkerHeartbeat(
+                worker_id="worker-a",
+                started_at=now,
+                last_seen_at=now,
+                region="ap-south-1b",
+                hostname="box-a",
+            )
+        )
+        await session.commit()
+
+        response = await client.get("/api/workers", headers=admin_headers)
+        assert response.status_code == 200, response.text
+        rows = {row["worker_id"]: row for row in response.json()}
+        assert rows["worker-a"]["region"] == "ap-south-1b"
+
+    async def test_a_worker_without_a_region_reports_none(
+        self, client, admin_headers, session
+    ):
+        """Empty on a single-worker deployment, where the answer is "the one
+        box" - not the string "unknown" for the UI to special-case."""
+        from datetime import datetime, timezone
+
+        from app.models.monitoring import WorkerHeartbeat
+
+        now = datetime.now(timezone.utc)
+        session.add(
+            WorkerHeartbeat(worker_id="worker-b", started_at=now, last_seen_at=now)
+        )
+        await session.commit()
+
+        response = await client.get("/api/workers", headers=admin_headers)
+        rows = {row["worker_id"]: row for row in response.json()}
+        assert rows["worker-b"]["region"] is None

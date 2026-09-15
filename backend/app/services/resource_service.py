@@ -367,6 +367,42 @@ async def redis_stats() -> dict[str, Any]:
                 pass
 
 
+# --------------------------------------------------------- vantage points
+async def vantage_stats(session: AsyncSession) -> list[dict[str, Any]]:
+    """Each configured vantage point and its last observed exit.
+
+    Read from the row the worker refreshes rather than probed here: the API
+    should not be making outbound requests to answer a page load, and the exit
+    only changes when a circuit is rebuilt.
+
+    Empty where no vantage points are configured, which is the common case -
+    the resources page then shows nothing about them at all rather than an
+    empty panel implying something is missing.
+    """
+    from app.services import vantage_service
+
+    try:
+        rows = await vantage_service.current_status(session)
+    except Exception as exc:
+        await session.rollback()
+        logger.warning("vantage_stats_failed", error=str(exc)[:200])
+        return []
+
+    return [
+        {
+            "name": row.name,
+            "proxy": row.proxy,
+            "reachable": row.reachable,
+            "observed_ip": row.observed_ip,
+            "observed_country": row.observed_country,
+            "observed_city": row.observed_city,
+            "error": row.error,
+            "checked_at": row.checked_at,
+        }
+        for row in rows
+    ]
+
+
 # ----------------------------------------------------------------- worker
 async def worker_stats(session: AsyncSession) -> list[dict[str, Any]]:
     """Per-worker resource use, carried on the heartbeat it already writes.
@@ -405,6 +441,7 @@ async def worker_stats(session: AsyncSession) -> list[dict[str, Any]]:
         {
             "worker_id": row.worker_id,
             "hostname": row.hostname,
+            "region": row.region,
             "last_seen_at": row.last_seen_at,
             "seconds_since_heartbeat": int(
                 (now - row.last_seen_at).total_seconds()
@@ -547,6 +584,7 @@ async def snapshot(session: AsyncSession) -> dict[str, Any]:
         "redis": await redis_stats(),
         "api": process_stats("api"),
         "workers": await worker_stats(session),
+        "vantages": await vantage_stats(session),
         "monitoring": await monitoring_throughput(session) or None,
         "days_until_disk_full": days_until_full,
         # Said out loud rather than left as a gap in the UI.

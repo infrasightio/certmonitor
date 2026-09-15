@@ -186,6 +186,10 @@ class WorkerHeartbeat(Base):
     in_flight: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     version: Mapped[str | None] = mapped_column(String(32))
     hostname: Mapped[str | None] = mapped_column(String(128))
+    # Where this worker runs, as its operator labels it - "ap-south-1b",
+    # "on-prem-dc2". Free text and purely descriptive: nothing schedules by it.
+    # Unset on a single-worker deployment, where the answer is "the one box".
+    region: Mapped[str | None] = mapped_column(String(64))
 
     # Self-reported cgroup figures. The worker measures its own container and
     # carries the numbers on the heartbeat it already writes, so the API can
@@ -278,3 +282,36 @@ class EndpointCapture(Base):
     endpoint: Mapped["Endpoint"] = relationship(  # noqa: F821
         back_populates="captures"
     )
+
+
+class VantageStatus(Base):
+    """Where a vantage point's traffic actually comes out.
+
+    One row per configured vantage, refreshed periodically by the worker and
+    read by the API - they are separate processes, so an in-memory cache in the
+    worker would be invisible to the screen that needs this.
+
+    It exists because the name in ``VANTAGE_POINTS`` is a label somebody typed,
+    not a fact. Tor is configured with ``StrictNodes 0`` so that it falls back
+    to another country rather than failing when the requested one has no exit
+    available - which is the right trade for availability, and means a vantage
+    labelled "Germany" can quietly be answering from somewhere else. This row
+    is what makes that visible instead of silently wrong.
+    """
+
+    __tablename__ = "vantage_status"
+
+    # The name from VANTAGE_POINTS. Config is the source of truth for which
+    # vantages exist; a row here is an observation about one of them, and is
+    # ignored once its name disappears from the configuration.
+    name: Mapped[str] = mapped_column(String(64), primary_key=True)
+    proxy: Mapped[str | None] = mapped_column(String(255))
+
+    observed_ip: Mapped[str | None] = mapped_column(String(64))
+    observed_country: Mapped[str | None] = mapped_column(String(8))
+    observed_city: Mapped[str | None] = mapped_column(String(64))
+
+    reachable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    error: Mapped[str | None] = mapped_column(String(255))
+    checked_at: Mapped[datetime] = mapped_column(TimestampTZ, nullable=False)
+    observed_by: Mapped[str | None] = mapped_column(String(64))

@@ -128,6 +128,17 @@ class Settings(BaseSettings):
     # that would otherwise open an incident, so this is rarely more than a
     # handful of requests a minute.
     VANTAGE_CONCURRENCY: int = 3
+    # Where a vantage's traffic actually comes out. Asked on a slow loop, not
+    # per check: an exit changes when Tor rebuilds a circuit, not between one
+    # request and the next. Any service returning JSON with an `ip` and a
+    # country field will do; blank it to stop asking anything external.
+    VANTAGE_ECHO_URL: str = "https://ifconfig.co/json"
+    VANTAGE_STATUS_INTERVAL_SECONDS: int = 900
+
+    # Where this worker runs, as its operator labels it - "ap-south-1b",
+    # "on-prem-dc2". Descriptive only: nothing schedules by it, and it is empty
+    # on a single-worker deployment where the answer is "the one box".
+    WORKER_REGION: str = ""
 
     # ------------------------------------------------------------ captures
     # The response body of the last pass and the last failure is always kept -

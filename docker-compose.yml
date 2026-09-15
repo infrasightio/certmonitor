@@ -210,6 +210,13 @@ services:
       # per check, not one per request.
       DB_POOL_SIZE: ${WORKER_DB_POOL_SIZE:-10}
       DB_MAX_OVERFLOW: ${WORKER_DB_MAX_OVERFLOW:-10}
+      # Shown on each worker card in System Resources. Note that `--scale
+      # worker=3` gives every replica the SAME value, because they share this
+      # environment - which is correct when the replicas are on one box. To
+      # label workers that genuinely sit in different places, run them as
+      # separate services (or separate Compose files) with a WORKER_REGION
+      # each; in Kubernetes, take it from the node's topology label.
+      WORKER_REGION: ${WORKER_REGION:-}
     depends_on:
       postgres:
         condition: service_healthy

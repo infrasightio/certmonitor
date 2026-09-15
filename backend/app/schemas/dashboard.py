@@ -231,6 +231,9 @@ class HealthResponse(BaseModel):
 class WorkerStatus(BaseModel):
     worker_id: str
     hostname: str | None = None
+    # Where the operator says this worker runs. Descriptive only - nothing
+    # schedules by it - and empty on a single-worker deployment.
+    region: str | None = None
     version: str | None = None
     started_at: datetime
     last_seen_at: datetime
@@ -239,3 +242,24 @@ class WorkerStatus(BaseModel):
     checks_completed: int = 0
     checks_failed: int = 0
     in_flight: int = 0
+
+
+class VantagePointStatus(BaseModel):
+    """Where one vantage point's traffic actually comes out.
+
+    `name` is the label from VANTAGE_POINTS; `observed_country` is what the
+    exit reported. They are separate fields on purpose - Tor runs with
+    StrictNodes 0 so it falls back to another country rather than failing, and
+    a vantage labelled "Germany" answering from Romania is a thing worth seeing
+    rather than a thing to hide.
+    """
+
+    name: str
+    proxy: str | None = None
+    reachable: bool = False
+    observed_ip: str | None = None
+    observed_country: str | None = None
+    observed_city: str | None = None
+    error: str | None = None
+    checked_at: datetime | None = None
+    observed_by: str | None = None

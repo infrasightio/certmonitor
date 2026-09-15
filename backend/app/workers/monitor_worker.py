@@ -129,6 +129,7 @@ class MonitorWorker:
                             in_flight=self._in_flight,
                             version=settings.APP_VERSION,
                             hostname=platform.node()[:128],
+                            region=(settings.WORKER_REGION or None),
                             cpu_percent=resources["cpu_percent"],
                             memory_mb=resources["memory_mb"],
                             memory_limit_mb=resources["memory_limit_mb"],
@@ -140,6 +141,7 @@ class MonitorWorker:
                     row.checks_failed = self._checks_failed
                     row.in_flight = self._in_flight
                     row.version = settings.APP_VERSION
+                    row.region = settings.WORKER_REGION or None
                     # cpu_percent is None on the first heartbeat - a rate needs
                     # two samples - so keep the previous value rather than
                     # blanking a good reading.
@@ -574,6 +576,30 @@ class MonitorWorker:
                 logger.error("retention_sweep_error", error=str(exc))
             await self._sleep_or_stop(settings.RETENTION_SWEEP_INTERVAL_SECONDS)
 
+    async def _vantage_status_loop(self) -> None:
+        """Re-observe where each vantage point's traffic comes out.
+
+        Slow on purpose. An exit changes when Tor rebuilds a circuit, not
+        between one request and the next, and each pass costs one external
+        request per vantage. Runs only where vantages are configured, so a
+        deployment without them never reaches out to anything.
+        """
+        if not vantage_service.configured() or not settings.VANTAGE_ECHO_URL:
+            return
+        # Ahead of the first confirmations, so the resources page has something
+        # to show rather than "not observed yet" for the first quarter hour.
+        await self._sleep_or_stop(20)
+        while not self._shutdown.is_set():
+            try:
+                async with SessionFactory() as session:
+                    await vantage_service.refresh_status(
+                        session, observed_by=self.worker_id
+                    )
+                    await session.commit()
+            except Exception as exc:
+                logger.warning("vantage_status_error", error=str(exc)[:200])
+            await self._sleep_or_stop(settings.VANTAGE_STATUS_INTERVAL_SECONDS)
+
     async def _ssl_sweep_loop(self) -> None:
         """Keep certificate states current between checks.
 
@@ -670,6 +696,7 @@ class MonitorWorker:
             asyncio.create_task(self._check_loop(), name="checks"),
             asyncio.create_task(self._retention_loop(), name="retention"),
             asyncio.create_task(self._ssl_sweep_loop(), name="ssl-sweep"),
+            asyncio.create_task(self._vantage_status_loop(), name="vantage-status"),
         ]
 
         try:

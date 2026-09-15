@@ -96,6 +96,9 @@ class ProcessUsage(BaseModel):
 class WorkerUsage(ProcessUsage):
     worker_id: str
     hostname: str | None = None
+    # Where the operator says this worker runs. Descriptive only, and empty on
+    # a single-worker deployment where the answer is "the one box".
+    region: str | None = None
     last_seen_at: datetime
     seconds_since_heartbeat: int
     healthy: bool
@@ -139,6 +142,28 @@ class MonitoringThroughput(BaseModel):
     last_check_at: datetime | None = None
 
 
+class VantageUsage(BaseModel):
+    """One vantage point, and where its traffic was last seen coming out.
+
+    On the resources page beside the workers, because between them they answer
+    the question an operator actually asks: which processes are running, and
+    from how many places can this deployment see the internet.
+
+    Defined above ResourceSnapshot, which refers to it - a forward reference
+    here would leave the snapshot model unbuilt until something happened to
+    rebuild it.
+    """
+
+    name: str
+    proxy: str | None = None
+    reachable: bool = False
+    observed_ip: str | None = None
+    observed_country: str | None = None
+    observed_city: str | None = None
+    error: str | None = None
+    checked_at: datetime | None = None
+
+
 class ResourceSnapshot(BaseModel):
     generated_at: datetime
     disk: DiskUsage
@@ -146,6 +171,10 @@ class ResourceSnapshot(BaseModel):
     redis: RedisUsage
     api: ProcessUsage
     workers: list[WorkerUsage] = Field(default_factory=list)
+    # Empty unless vantage points are configured. Beside the workers because
+    # the two together answer "what is running, and from how many places can
+    # this deployment see the internet".
+    vantages: list[VantageUsage] = Field(default_factory=list)
     monitoring: MonitoringThroughput | None = None
     # Only computed while the database is still growing - see
     # DatabaseUsage.at_steady_state.
@@ -175,3 +204,4 @@ class FeatureFlags(BaseModel):
 
     change_management: bool
     rca: bool
+

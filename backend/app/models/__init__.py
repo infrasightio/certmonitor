@@ -20,6 +20,7 @@ from app.models.monitoring import (
     EndpointCapture,
     MonitoringResult,
     SslCertificate,
+    VantageStatus,
     WorkerHeartbeat,
 )
 from app.models.system import AuditLog, SystemSetting
@@ -44,6 +45,7 @@ __all__ = [
     "Rca",
     "Role",
     "SslCertificate",
+    "VantageStatus",
     "SystemSetting",
     "Tag",
     "User",

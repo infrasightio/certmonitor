@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   Cpu,
   Database,
+  Globe,
   HardDrive,
   Info,
   MemoryStick,
@@ -194,6 +195,7 @@ export default function SystemResources() {
     redis,
     api,
     workers,
+    vantages,
     monitoring,
     days_until_disk_full,
   } = data
@@ -476,7 +478,17 @@ export default function SystemResources() {
           <ProcessCard
             key={worker.worker_id}
             icon={Cpu}
-            title={`Worker · ${worker.worker_id}`}
+            title={
+              <span className="flex flex-wrap items-center gap-1.5">
+                <span>Worker · {worker.worker_id}</span>
+                {/* Only where the operator set one. On a single-worker
+                    deployment the answer is "the one box", and an "unknown"
+                    chip would be noise on every card. */}
+                {worker.region ? (
+                  <span className="chip">{worker.region}</span>
+                ) : null}
+              </span>
+            }
             subtitle={
               worker.healthy
                 ? `Heartbeat ${worker.seconds_since_heartbeat}s ago · ${formatNumber(worker.checks_completed)} checks done`
@@ -488,6 +500,7 @@ export default function SystemResources() {
                 <span>In flight: {worker.in_flight}</span>
                 <span>Failed: {formatNumber(worker.checks_failed)}</span>
                 <span>Up {Math.round(worker.uptime_seconds / 3600)}h</span>
+                {worker.hostname ? <span>{worker.hostname}</span> : null}
               </div>
             }
           />
@@ -530,6 +543,95 @@ export default function SystemResources() {
           )}
         </Card>
       </div>
+
+      {/* --------------------------------------------------- vantage points */}
+      {vantages?.length ? (
+        <Card
+          title={
+            <span className="flex items-center gap-1.5">
+              <Globe size={15} /> Vantage points
+            </span>
+          }
+          bodyClassName="p-0"
+        >
+          <p className="border-b border-slate-100 px-4 py-2.5 text-xs text-slate-500 dark:border-navy-800 dark:text-slate-400">
+            Extra places a failing endpoint is re-checked from before an
+            incident is opened. <strong>Observed</strong> is where the traffic
+            actually came out — the name is only a label, and an exit falls back
+            to another country when the requested one is unavailable.
+          </p>
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Observed exit</th>
+                  <th>Address</th>
+                  <th>Proxy</th>
+                  <th>Checked</th>
+                </tr>
+              </thead>
+              <tbody>
+                {vantages.map((vantage) => {
+                  // The label and the reality, compared. A vantage called
+                  // "Germany" exiting in Romania is the case this table exists
+                  // to surface rather than quietly pass off as Germany.
+                  const country = vantage.observed_country
+                  const mismatch =
+                    vantage.reachable &&
+                    country &&
+                    !vantage.name.toLowerCase().includes(country.toLowerCase())
+                  return (
+                    <tr key={vantage.name}>
+                      <td className="font-medium text-slate-800 dark:text-slate-100">
+                        {vantage.name}
+                      </td>
+                      <td>
+                        {vantage.reachable ? (
+                          <span className="flex flex-wrap items-center gap-1.5">
+                            <span className="badge bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300">
+                              {country || 'reachable'}
+                            </span>
+                            {vantage.observed_city ? (
+                              <span className="text-xs text-slate-500 dark:text-slate-400">
+                                {vantage.observed_city}
+                              </span>
+                            ) : null}
+                            {mismatch ? (
+                              <span
+                                className="badge bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                                title={`Configured as "${vantage.name}" but exiting in ${country}`}
+                              >
+                                not {vantage.name}
+                              </span>
+                            ) : null}
+                          </span>
+                        ) : (
+                          <span
+                            className="badge bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300"
+                            title={vantage.error || undefined}
+                          >
+                            unreachable
+                          </span>
+                        )}
+                      </td>
+                      <td className="font-mono text-xs text-slate-600 dark:text-slate-300">
+                        {vantage.observed_ip || '—'}
+                      </td>
+                      <td className="font-mono text-xs text-slate-500 dark:text-slate-400">
+                        {vantage.proxy || '—'}
+                      </td>
+                      <td className="whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">
+                        {vantage.checked_at ? formatRelative(vantage.checked_at) : '—'}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      ) : null}
 
       {/* ----------------------------------------------------- not measured */}
       {data.not_measured?.length ? (

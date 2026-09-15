@@ -18,9 +18,14 @@ from app.api.deps import DbSession, ReadSettings
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.models.monitoring import WorkerHeartbeat
-from app.schemas.dashboard import ComponentHealth, HealthResponse, WorkerStatus
+from app.schemas.dashboard import (
+    ComponentHealth,
+    HealthResponse,
+    VantagePointStatus,
+    WorkerStatus,
+)
 from app.schemas.system import ResourceSnapshot
-from app.services import resource_service
+from app.services import resource_service, vantage_service
 
 logger = get_logger(__name__)
 
@@ -244,6 +249,7 @@ async def workers(session: DbSession, _user: ReadSettings) -> list[WorkerStatus]
             WorkerStatus(
                 worker_id=row.worker_id,
                 hostname=row.hostname,
+                region=row.region,
                 version=row.version,
                 started_at=row.started_at,
                 last_seen_at=last_seen,
@@ -280,3 +286,35 @@ async def system_resources(
     return ResourceSnapshot.model_validate(
         await resource_service.snapshot(session)
     )
+
+
+@router.get(
+    "/api/vantage-points",
+    response_model=list[VantagePointStatus],
+    summary="Where each vantage point's traffic comes out",
+)
+async def vantage_points(
+    session: DbSession, _user: ReadSettings
+) -> list[VantagePointStatus]:
+    """Every configured vantage point and its last observed exit.
+
+    Driven by the configuration rather than by what has been observed, so a
+    vantage that has never answered still appears. "Configured but never
+    reached" is the most useful thing this can report, and a missing row would
+    render as nothing at all.
+    """
+    rows = await vantage_service.current_status(session)
+    return [
+        VantagePointStatus(
+            name=row.name,
+            proxy=row.proxy,
+            reachable=row.reachable,
+            observed_ip=row.observed_ip,
+            observed_country=row.observed_country,
+            observed_city=row.observed_city,
+            error=row.error,
+            checked_at=row.checked_at,
+            observed_by=row.observed_by,
+        )
+        for row in rows
+    ]
