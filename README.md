@@ -1390,7 +1390,7 @@ Built automatically from real events, and every entry names its source, so a
 derived fact never reads like something a person wrote:
 
 ```
-23:30  Deployment      CHG-2026-0018 started by rishabh (Payment API)
+23:30  Deployment      CHG-2026-0018 started by priya (Payment API)
 23:38  Deployment      CHG-2026-0018 completed
 23:42  Monitoring      Endpoint became unhealthy — Unexpected HTTP status 502
 23:44  Diagnose        Upstream unavailable (high confidence)

@@ -573,7 +573,7 @@ export default function EndpointForm({ open, onClose, onSaved, endpoint, filters
               className="input"
               value={form.owner_name}
               onChange={setInput('owner_name')}
-              placeholder="Rishabh Gupta"
+              placeholder="Full name"
               maxLength={128}
             />
           </Field>

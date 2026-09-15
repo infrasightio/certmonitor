@@ -533,15 +533,6 @@ export default function UsersPage() {
                 placeholder="DevOps"
               />
             </Field>
-            <Field label="Team" hint="Free text, e.g. DevOps. Used for RCA ownership.">
-              <input
-                className="input"
-                value={form.team}
-                onChange={(event) => setForm({ ...form, team: event.target.value })}
-                maxLength={64}
-                placeholder="DevOps"
-              />
-            </Field>
             <Field label="E-mail">
               <input
                 type="email"
