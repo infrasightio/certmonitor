@@ -133,18 +133,30 @@ def build_async_client(
     max_redirects: int = 10,
     http2: bool = False,
     event_hooks: dict[str, list] | None = None,
+    proxy: str | None = None,
 ) -> httpx.AsyncClient:
     """Create a single-use client for one endpoint check.
 
     Connections are not pooled across checks on purpose: a monitor should
     measure a cold, representative request rather than reuse a warm keep-alive
     socket that hides connection-level problems.
+
+    ``proxy`` routes the request through a SOCKS5 or HTTP proxy, which is how a
+    vantage-point check reaches the endpoint from somewhere other than this
+    host's own egress. It deliberately DISABLES the timing transport: through a
+    proxy, the DNS, connect and TLS phases measure the hop to the proxy, not to
+    the endpoint, and reporting those as the endpoint's latency would be a
+    straightforward lie. A proxied check answers one question - reachable or
+    not - and the local check remains the only source of timings.
+
+    TLS is still end-to-end either way, so certificate inspection through a
+    proxy sees the endpoint's real certificate, not the proxy's.
     """
     limits = httpx.Limits(max_connections=1, max_keepalive_connections=0)
     timeout_config = httpx.Timeout(timeout, connect=timeout, read=timeout, write=timeout)
 
     transport: httpx.AsyncBaseTransport | None = None
-    if _BACKEND_AVAILABLE:
+    if _BACKEND_AVAILABLE and not proxy:
         try:
             transport = _InstrumentedTransport(
                 verify=verify,
@@ -165,6 +177,7 @@ def build_async_client(
         http2=http2,
         trust_env=False,
         event_hooks=event_hooks or {},
+        proxy=proxy,
     )
 
 

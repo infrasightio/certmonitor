@@ -450,6 +450,14 @@ class EndpointRead(EndpointListItem):
     ssl_critical_days: int | None = None
     alerts_enabled: bool
 
+    # The last time this endpoint was about to be declared down and was
+    # re-checked from elsewhere first. Written only on that one check, so its
+    # presence means "we nearly paged you", and its contents say what everywhere
+    # else saw. Null on an endpoint that has never reached its failure
+    # threshold, or where no vantage points are configured.
+    last_vantage_check: dict[str, Any] | None = None
+    last_vantage_check_at: datetime | None = None
+
     total_checks: int = 0
     total_failures: int = 0
     next_check_at: datetime | None = None

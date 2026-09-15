@@ -135,6 +135,11 @@ class CheckTarget:
     retry_attempts: int = 0
     retry_delay_ms: int = 500
 
+    # Route this check through a SOCKS5/HTTP proxy instead of the host's own
+    # egress - the mechanism behind a vantage-point check. Set, the timing
+    # phases are not collected: they would measure the hop to the proxy.
+    proxy: str | None = None
+
 
 @dataclass
 class CheckOutcome:
@@ -366,6 +371,7 @@ async def _run_http_check(target: CheckTarget, outcome: CheckOutcome) -> CheckOu
             if target.follow_redirects
             else None
         ),
+        proxy=target.proxy,
     )
     request_started = perf_counter()
     try:

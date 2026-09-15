@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
   Clock,
+  Globe,
   Network,
   Pause,
   Pencil,
@@ -77,6 +78,73 @@ const TABS = [
   { id: 'certificate', label: 'Certificate' },
   { id: 'configuration', label: 'Configuration' },
 ]
+
+/**
+ * What everywhere else saw, the last time this endpoint was about to be
+ * declared down.
+ *
+ * Only rendered when a confirmation actually happened, which is once per
+ * outage - the failing check that would have opened the incident. Its presence
+ * means "we nearly paged you"; the verdict says whether we did.
+ */
+function VantageNotice({ endpoint }) {
+  const verdict = endpoint.last_vantage_check
+  if (!verdict?.results?.length) return null
+
+  const withheld = verdict.reachable_elsewhere
+  return (
+    <div
+      className={clsx(
+        'card p-3',
+        withheld
+          ? 'border-amber-300 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30'
+          : '',
+      )}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <Globe size={15} className="shrink-0 text-slate-400" aria-hidden="true" />
+        <span className="text-sm font-medium text-slate-800 dark:text-slate-100">
+          {withheld
+            ? 'Checked from elsewhere — no incident opened'
+            : 'Checked from elsewhere — unreachable everywhere'}
+        </span>
+        <span className="text-xs text-slate-500 dark:text-slate-400">
+          {formatRelative(endpoint.last_vantage_check_at)}
+        </span>
+      </div>
+      <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+        {withheld
+          ? 'It answered from at least one other network while failing from this host, so the fault is more likely on the path from here than at the endpoint. The incident opens on the next failure that cannot be explained this way.'
+          : 'No vantage point could reach it either, so the outage was treated as real.'}
+      </p>
+      <ul className="mt-2 flex flex-wrap gap-1.5">
+        {verdict.results.map((result) => (
+          <li
+            key={result.name}
+            className={clsx(
+              'badge',
+              result.reachable === true
+                ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300'
+                : result.reachable === false
+                  ? 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
+                  : 'bg-slate-100 text-slate-600 dark:bg-navy-800 dark:text-slate-400',
+            )}
+            title={result.detail || undefined}
+          >
+            {result.name}
+            <span className="font-normal opacity-80">
+              {result.reachable === true
+                ? 'reachable'
+                : result.reachable === false
+                  ? 'unreachable'
+                  : 'no answer'}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
 
 export default function EndpointDetail() {
   const { endpointId } = useParams()
@@ -636,6 +704,7 @@ export default function EndpointDetail() {
       {/* --------------------------------------------------- overview */}
       {tab === 'overview' ? (
         <div className="space-y-4">
+          <VantageNotice endpoint={endpoint} />
           <Card
             title="Availability"
             actions={

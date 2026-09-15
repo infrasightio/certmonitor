@@ -108,6 +108,27 @@ class Settings(BaseSettings):
     FAILURE_THRESHOLD: int = 3
     RESPONSE_TIME_THRESHOLD_MS: int = 2000
 
+    # ------------------------------------------------------- vantage points
+    # Extra places to check from before believing an endpoint is down. Each is
+    # a proxy this host can reach - a Tor SocksPort pinned to an exit country,
+    # or a VPN container exposing SOCKS - so the check leaves by a different
+    # route than the worker's own egress.
+    #
+    # JSON, because it carries proxy URLs that may hold credentials and those
+    # belong in the environment rather than in a settings row rendered in the
+    # UI. Example:
+    #   VANTAGE_POINTS=[{"name":"Germany","proxy":"socks5://tor:9050"}]
+    VANTAGE_POINTS: str = ""
+    VANTAGE_ENABLED: bool = True
+    # A free exit is slow, so this is generous - but not unbounded: the
+    # confirmation runs with the failing check's database session still open,
+    # and the whole round is capped at this plus a couple of seconds.
+    VANTAGE_TIMEOUT_SECONDS: int = 15
+    # How many vantages to try at once. They are only consulted on the check
+    # that would otherwise open an incident, so this is rarely more than a
+    # handful of requests a minute.
+    VANTAGE_CONCURRENCY: int = 3
+
     # ------------------------------------------------------------ captures
     # The response body of the last pass and the last failure is always kept -
     # it costs a few kilobytes per endpoint and no dependency. The SCREENSHOT

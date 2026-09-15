@@ -49,6 +49,7 @@ from app.services import (
     resource_service,
     retention_service,
     settings_service,
+    vantage_service,
 )
 
 configure_logging()
@@ -295,6 +296,9 @@ class MonitorWorker:
                         outcome = await monitoring_service.execute_check(
                             endpoint, config
                         )
+                        withhold = await self._vantage_gate(
+                            endpoint, outcome, config
+                        )
                         await monitoring_service.record_check_result(
                             session,
                             endpoint,
@@ -302,6 +306,7 @@ class MonitorWorker:
                             config=config,
                             checked_by=self.worker_id,
                             is_manual=False,
+                            withhold_incident_reason=withhold,
                         )
                         # Replaces this endpoint's previous capture for
                         # whichever outcome the check had. Two rows per
@@ -358,6 +363,61 @@ class MonitorWorker:
                 await self._release_lease(endpoint_id)
             finally:
                 self._in_flight -= 1
+
+    # ------------------------------------------------------ vantage points
+    async def _vantage_gate(
+        self, endpoint: Endpoint, outcome, config: dict
+    ) -> str | None:
+        """Ask elsewhere before declaring this endpoint down.
+
+        Runs on ONE check per outage: the failing one that would take the
+        endpoint over its threshold. Not on every failure - once an incident is
+        open the question has been answered - and never on a success.
+
+        Returns the reason to withhold the incident, or None to let the check
+        record normally. Every path that is not a confident "reachable from
+        elsewhere" returns None, so a missing, busy or confused set of vantage
+        points can only ever leave today's behaviour intact. A monitor that
+        withholds an alert because a proxy was slow would be worse than one
+        with no vantage points at all.
+        """
+        if outcome.is_up:
+            return None
+        if not vantage_service.configured():
+            return None
+
+        thresholds = monitoring_service.resolve_thresholds(endpoint, config)
+        # +1 because this failure has not been counted yet.
+        failures = (endpoint.consecutive_failures or 0) + 1
+        # Exactly the check that first reaches the threshold, not every failure
+        # at or beyond it. Below it nobody is about to be paged; above it the
+        # incident is either already open or was withheld once already, and one
+        # grace check is the whole of the offer. That also bounds proxy use to
+        # one round per outage rather than one per failing check.
+        if failures != thresholds["failure_threshold"]:
+            return None
+
+        try:
+            verdict = await vantage_service.confirm(endpoint, config)
+        except Exception as exc:
+            logger.warning(
+                "vantage_confirmation_error", endpoint=endpoint.name, error=str(exc)[:200]
+            )
+            return None
+
+        endpoint.last_vantage_check = verdict.as_dict()
+        endpoint.last_vantage_check_at = _now()
+
+        if not verdict.reachable_elsewhere:
+            return None
+
+        reachable = [r.name for r in verdict.results if r.reachable is True]
+        return (
+            "Reachable from "
+            + ", ".join(reachable[:3])
+            + " while failing from this host, so the fault is more likely to be "
+            "on the path from here than at the endpoint."
+        )[:500]
 
     # --------------------------------------------------------- screenshots
     def _wants_screenshot(self, endpoint: Endpoint) -> bool:

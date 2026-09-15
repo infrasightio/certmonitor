@@ -705,6 +705,58 @@ when they differ, naming which rule is in play.
 A worker that dies mid-batch strands nothing — its leases expire and the
 endpoints become claimable again.
 
+### Vantage points
+
+A single VM has one egress path, so "the endpoint is down" and "the path from
+this box is down" look identical. A vantage point is a proxy the worker can
+reach — a Tor SocksPort, a VPN container exposing SOCKS — that lets the same
+check leave by a different route.
+
+```
+VANTAGE_POINTS=[{"name":"Germany","proxy":"socks5://tor-de:9050"}, ...]
+```
+
+`docker-compose.yml` ships three free ones (`tor-de`, `tor-us`, `tor-sg`), one
+container per country because `ExitNodes` is a global torrc directive — several
+SocksPorts on one instance would all leave through the same place. Point
+`VANTAGE_POINTS` at gluetun or anything else that speaks SOCKS instead; nothing
+in the application knows what is behind the proxy.
+
+**A verdict can only ever withhold an incident, never open one.** It is
+consulted on exactly one check per outage — the failing one that first reaches
+`failure_threshold`. If any vantage still reaches the endpoint, the incident is
+held back and the endpoint page says so. If none can, nothing changes. The very
+next failing check opens the incident regardless: one grace check is the whole
+of the offer, which also bounds proxy use to one round per outage.
+
+Free exits are slow, rate-limited and routinely blocked, so every ambiguous
+answer is discarded rather than counted:
+
+| Vantage saw | Counts as |
+|---|---|
+| The expected response | reachable — withhold |
+| A real wrong answer (500, 404) | agreement — open the incident |
+| 403 / 429 / 503 from a blocked or throttled exit | no opinion |
+| The proxy itself unreachable, or the round timed out | no opinion |
+| DNS failure from a working exit | agreement |
+
+Everything else fails open to today's behaviour: no vantages configured, more
+than `VANTAGE_CONCURRENCY` confirmations already running, malformed
+`VANTAGE_POINTS`, an internal hostname that no external exit could reach, or a
+non-HTTP check. A monitor that swallows an alert because a proxy was slow would
+be worse than one with no vantage points at all.
+
+A vantage never contributes a latency figure or an uptime percentage. It runs
+through a proxy, so its timings are the proxy's, and it runs only on failure,
+so counting it would skew availability toward whatever the exits are doing. The
+local check stays the only measurement — which is why a proxied check disables
+the timing transport outright.
+
+**What this does not buy you.** On one VM the worker, the kernel, the NIC and
+the availability zone are still shared. A vantage rules out your egress path
+and the transit beyond it. It does not rule out the host. If the box is sick,
+every vantage on it is sick too.
+
 ### Last response captures
 
 An incident tells you an endpoint failed. It rarely tells you what it *said*

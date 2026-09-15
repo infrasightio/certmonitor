@@ -26,7 +26,9 @@ PyJWT==2.10.1
 cryptography==44.0.0
 
 # --- HTTP client for monitoring checks ---
-httpx[http2]==0.28.1
+# socks: SOCKS5 proxy support, which is how a vantage-point check leaves this
+# host by a different route (a Tor SocksPort, or a VPN container exposing one).
+httpx[http2,socks]==0.28.1
 
 # --- Caching / coordination ---
 redis==5.2.1

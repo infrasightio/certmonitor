@@ -86,6 +86,9 @@ class RecordedCheck:
     incident_opened: Incident | None = None
     incident_closed: Incident | None = None
     certificate: SslCertificate | None = None
+    # Set when a failure reached the threshold but no incident was opened,
+    # because somewhere else could still reach the endpoint.
+    incident_withheld_reason: str | None = None
     alerts_raised: list[Any] = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
@@ -443,8 +446,18 @@ async def record_check_result(
     checked_by: str | None = None,
     is_manual: bool = False,
     dispatch_notifications: bool = True,
+    withhold_incident_reason: str | None = None,
 ) -> RecordedCheck:
-    """Persist a check and apply every downstream state transition."""
+    """Persist a check and apply every downstream state transition.
+
+    ``withhold_incident_reason`` records the failure and lets the consecutive
+    count climb, but does not open an incident or raise the alert that goes
+    with it. It exists for one caller: a vantage-point confirmation that found
+    the endpoint reachable from somewhere other than this host, which makes the
+    failure more likely to be ours than theirs. The endpoint still reads as
+    DOWN - it is, from here - and the incident opens on the very next failing
+    check, which the worker does not offer a second reprieve to.
+    """
     thresholds = resolve_thresholds(endpoint, config)
     previous_status = endpoint.current_status
     now = outcome.checked_at
@@ -619,6 +632,17 @@ async def record_check_result(
                 open_incident.timeline = timeline[-50:]
                 open_incident.reason = outcome.failure_reason
                 open_incident.error_message = outcome.error_message
+        elif failures >= threshold and withhold_incident_reason:
+            # Reachable from elsewhere. Recorded so the endpoint page can say
+            # why nobody was paged, rather than leaving a run of failures with
+            # no incident looking like a bug in the monitor.
+            logger.info(
+                "incident_withheld",
+                endpoint=endpoint.name,
+                failures=failures,
+                reason=withhold_incident_reason,
+            )
+            recorded.incident_withheld_reason = withhold_incident_reason
         elif failures >= threshold:
             grouping_minutes = int(config.get("incident_grouping_minutes", 15))
             regroupable = await _find_regroupable_incident(

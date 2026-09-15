@@ -85,6 +85,71 @@ services:
     networks:
       - infrasight
 
+  # -------------------------------------------------------- vantage exits
+  #
+  # Three SOCKS proxies, each exiting in a different country, so the worker can
+  # re-check a failing endpoint from somewhere other than this host's own egress.
+  # Free, and no second VM.
+  #
+  # Tor is the cheapest way to get genuinely different network positions from a
+  # single box. It is also slow, rate-limited, and routinely blocked by WAFs and
+  # CDNs - which is why a vantage verdict in this product can only ever WITHHOLD
+  # an incident and never open one, and why a blocked or timed-out exit counts
+  # as "no opinion" rather than as agreement. See app/services/vantage_service.
+  #
+  # StrictNodes 0 on purpose: when no exit is available in the requested
+  # country Tor picks another rather than failing, and a check from the wrong
+  # country is still a check from somewhere that is not this VM.
+  #
+  # Swap this for gluetun, or any VPN container that exposes SOCKS, by pointing
+  # VANTAGE_POINTS at it instead. Nothing in the application knows what is
+  # behind the proxy.
+  #
+  # Remove this service and unset VANTAGE_POINTS to turn the whole thing off:
+  # with no vantages configured the worker behaves exactly as it did before.
+  #
+  # One container per exit country, NOT one container with three ports:
+  # `ExitNodes` is a global torrc directive, so several SocksPorts on one
+  # instance would all leave through the same country and give you three
+  # circuits to one place rather than three places. About 40 MB of RAM each.
+  #
+  # Ports are not published to the host - only the worker on the internal
+  # network needs them, and a reachable SOCKS port is an open relay.
+  tor-de: &tor
+    image: dperson/torproxy:latest
+    restart: unless-stopped
+    command: >
+      sh -c "mkdir -p /tmp/tor && printf '%s\n'
+      'SocksPort 0.0.0.0:9050'
+      'DataDirectory /tmp/tor'
+      'ExitNodes {de}'
+      'StrictNodes 0'
+      > /tmp/torrc && exec tor -f /tmp/torrc"
+    expose:
+      - "9050"
+    networks:
+      - infrasight
+
+  tor-us:
+    <<: *tor
+    command: >
+      sh -c "mkdir -p /tmp/tor && printf '%s\n'
+      'SocksPort 0.0.0.0:9050'
+      'DataDirectory /tmp/tor'
+      'ExitNodes {us}'
+      'StrictNodes 0'
+      > /tmp/torrc && exec tor -f /tmp/torrc"
+
+  tor-sg:
+    <<: *tor
+    command: >
+      sh -c "mkdir -p /tmp/tor && printf '%s\n'
+      'SocksPort 0.0.0.0:9050'
+      'DataDirectory /tmp/tor'
+      'ExitNodes {sg}'
+      'StrictNodes 0'
+      > /tmp/torrc && exec tor -f /tmp/torrc"
+
   # ----------------------------------------------------------- API layer
   backend:
     build:

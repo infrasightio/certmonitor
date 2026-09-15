@@ -269,6 +269,14 @@ class Endpoint(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     ssl_issuer: Mapped[str | None] = mapped_column(String(255))
     ssl_common_name: Mapped[str | None] = mapped_column(String(255))
 
+    # The last vantage-point confirmation, and when. Written only on the check
+    # that would otherwise have opened an incident, so this is the record of
+    # "we were about to page you, and here is what everywhere else saw". Kept
+    # on the endpoint rather than in a table of its own because only the latest
+    # one has ever been worth reading.
+    last_vantage_check: Mapped[dict | None] = mapped_column(JSONType)
+    last_vantage_check_at: Mapped[datetime | None] = mapped_column(TimestampTZ)
+
     # ------------------------------------------------------- scheduling
     next_check_at: Mapped[datetime | None] = mapped_column(TimestampTZ, index=True)
     # Set while a worker holds the row, so a crashed worker's endpoint becomes
