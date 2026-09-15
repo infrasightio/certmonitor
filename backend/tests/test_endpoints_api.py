@@ -689,3 +689,61 @@ class TestDashboardApi:
         body = response.json()
         assert body["total_endpoints"] == 1
         assert body["unknown"] == 1
+
+
+class TestReportedCadence:
+    """`effective_interval_seconds` — what an endpoint is ACTUALLY checked at.
+
+    The configured interval is the healthy, non-production cadence; the API
+    reports the resolved one so a screen saying "every 5 minutes" cannot sit
+    above a next check forty seconds away.
+    """
+
+    async def test_a_plain_endpoint_reports_its_own_interval(
+        self, client, admin_headers
+    ):
+        response = await client.post(
+            "/api/endpoints",
+            json={**BASE, "interval_seconds": 600},
+            headers=admin_headers,
+        )
+        body = response.json()
+        assert body["interval_seconds"] == 600
+        assert body["effective_interval_seconds"] == 600
+
+    async def test_production_reports_the_fast_cadence(self, client, admin_headers):
+        environments = await client.get("/api/environments", headers=admin_headers)
+        production = next(
+            item for item in environments.json() if item["name"] == "production"
+        )
+
+        created = await client.post(
+            "/api/endpoints",
+            json={**BASE, "environment": production["id"], "interval_seconds": 600},
+            headers=admin_headers,
+        )
+        assert created.status_code == 201, created.text
+        body = created.json()
+        # Configured at ten minutes, checked every one: the setting is the
+        # cadence while healthy and outside production, not a promise.
+        assert body["interval_seconds"] == 600
+        assert body["effective_interval_seconds"] == 60
+
+        detail = await client.get(
+            f"/api/endpoints/{body['id']}", headers=admin_headers
+        )
+        assert detail.json()["effective_interval_seconds"] == 60
+
+    async def test_the_list_reports_it_too(self, client, admin_headers):
+        await client.post(
+            "/api/endpoints",
+            json={**BASE, "interval_seconds": 1800},
+            headers=admin_headers,
+        )
+        response = await client.get("/api/endpoints", headers=admin_headers)
+        row = next(
+            item
+            for item in response.json()["items"]
+            if item["name"] == BASE["name"]
+        )
+        assert row["effective_interval_seconds"] == 1800

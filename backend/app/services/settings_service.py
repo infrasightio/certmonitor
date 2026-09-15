@@ -64,6 +64,51 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         allowed_values=_INTERVAL_CHOICES,
     ),
     SettingSpec(
+        key="fast_check_environments",
+        value_type="json",
+        default=["production"],
+        category="monitoring",
+        label="Environments always checked at the fast interval",
+        description=(
+            "Environment names, comma-separated. Endpoints in these are "
+            "checked at the fast interval below whether their last check "
+            "passed or failed - production is watched continuously, not only "
+            "once it is already broken. Everything else runs on its own "
+            "interval and escalates only while it is failing."
+        ),
+    ),
+    SettingSpec(
+        key="fast_check_interval",
+        value_type="int",
+        default=60,
+        category="monitoring",
+        label="Fast interval (seconds)",
+        description=(
+            "The cadence applied to the environments above. An endpoint "
+            "configured to run more often than this keeps its own interval - "
+            "this is a ceiling on staleness, never a slow-down."
+        ),
+        min_value=env_settings.MIN_MONITOR_INTERVAL,
+        max_value=env_settings.MAX_MONITOR_INTERVAL,
+        allowed_values=_INTERVAL_CHOICES,
+    ),
+    SettingSpec(
+        key="failure_recheck_interval",
+        value_type="int",
+        default=60,
+        category="monitoring",
+        label="Interval while an endpoint is failing (seconds)",
+        description=(
+            "After a failed check, the endpoint is retried this often until "
+            "it passes again, then drops straight back to its own interval. "
+            "This is what keeps a ten-minute interval from meaning a "
+            "ten-minute-old view of an outage."
+        ),
+        min_value=env_settings.MIN_MONITOR_INTERVAL,
+        max_value=env_settings.MAX_MONITOR_INTERVAL,
+        allowed_values=_INTERVAL_CHOICES,
+    ),
+    SettingSpec(
         key="default_timeout",
         value_type="int",
         default=env_settings.DEFAULT_TIMEOUT,

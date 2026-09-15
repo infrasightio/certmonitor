@@ -371,7 +371,7 @@ that matter most:
 |---|---|---|
 | `HTTP_PORT` | `8080` | Published dashboard port. |
 | `ENCRYPTION_KEY` | derived from `JWT_SECRET` | Encrypts endpoint credentials and channel configs. Set it explicitly if you want to rotate `JWT_SECRET` independently. |
-| `DEFAULT_MONITOR_INTERVAL` | `60` | Seconds. Also editable at runtime. |
+| `DEFAULT_MONITOR_INTERVAL` | `300` | Seconds, and the *healthy* cadence only — see [Check cadence](#check-cadence). Also editable at runtime. |
 | `DEFAULT_TIMEOUT` | `10` | Seconds. |
 | `MIN_MONITOR_INTERVAL` | `30` | Hard floor, enforced server-side. |
 | `SSL_WARNING_DAYS` / `SSL_CRITICAL_DAYS` | `30` / `7` | Certificate state thresholds. |
@@ -582,6 +582,9 @@ only the authentication *type* — because an export leaves the application.
 | Setting | Effect |
 |---|---|
 | Default monitoring interval | Applied to new endpoints. Choices: 30 s, 1, 5, 10, 30 min, 1 h. |
+| Environments always checked at the fast interval | Names, comma-separated. Default `production`. |
+| Fast interval | The cadence for those environments, passing or failing. Default 1 min. |
+| Interval while an endpoint is failing | The recheck cadence after a failed check, until it passes. Default 1 min. |
 | Default timeout | Per-check timeout, capped at the interval. |
 | Consecutive failures before an incident | The incident threshold. |
 | Consecutive successes before recovery | Guards against flapping. |
@@ -655,11 +658,49 @@ means something.
    lease.
 2. **Probe** — concurrently, bounded by `WORKER_CONCURRENCY`.
 3. **Record** — each check in its own short transaction.
-4. **Reschedule** — `next_check_at = now + interval ± 10 % jitter`, lease
-   released.
+4. **Reschedule** — `next_check_at = now + resolved interval ± 10 % jitter`,
+   lease released.
 
 Jitter matters: without it, endpoints created by one bulk import share a due
 time forever and arrive as a thundering herd every interval.
+
+### Check cadence
+
+An endpoint's stored `interval_seconds` is the cadence it runs at *while it is
+healthy and not in production*. The interval actually used is resolved on every
+reschedule by `monitoring_service.resolve_check_interval`:
+
+| Situation | Interval |
+|---|---|
+| In a fast-check environment (`production` by default) | `fast_check_interval` — 1 min, passing or failing |
+| Anywhere else, last check failed | `failure_recheck_interval` — 1 min, until it passes |
+| Anywhere else, last check passed | its own `interval_seconds` — 5 min by default |
+
+Two things follow from resolving it per check rather than storing it:
+
+- **Production is watched continuously, not only once it is already broken.**
+  A cadence that speeds up *after* the first failure cannot make that first
+  failure any less late.
+- **Everything else escalates only while it is actually broken**, and drops
+  back to its own interval on the first passing check — no decay period. A
+  five-minute interval would otherwise mean a five-minute-old view of an
+  outage, and five minutes of guessing whether it has recovered.
+
+Both rules take the *smaller* of the two values, so neither ever slows an
+endpoint down: one deliberately set to 30 seconds keeps 30 seconds in
+production. `MIN_MONITOR_INTERVAL` remains the floor, so a mis-set setting
+cannot turn the monitor into a load generator.
+
+Every scheduling site — the worker, a manual "check now", and the health check
+after a deployment — goes through `next_check_for`, so the three cannot drift
+apart.
+
+The endpoint API reports both: `interval_seconds` is what is configured, and
+`effective_interval_seconds` is what is running right now. The endpoints table
+and the "Next check" metric show the effective one — a stated interval that
+does not match the gap between checks is worse than none — and the endpoint's
+Configuration card shows the configured value with the effective one beside it
+when they differ, naming which rule is in play.
 
 A worker that dies mid-batch strands nothing — its leases expire and the
 endpoints become claimable again.

@@ -1,17 +1,27 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
+  CalendarClock,
+  Check,
   CheckCircle2,
   ClipboardList,
+  Copy,
   ExternalLink,
   FileText,
+  History,
   MessageSquare,
   Paperclip,
   Plus,
   RotateCcw,
   Save,
+  Search,
+  ShieldCheck,
+  Siren,
+  Tag,
   UserCog,
+  Users,
+  Wrench,
   X,
 } from 'lucide-react'
 import clsx from 'clsx'
@@ -36,29 +46,115 @@ import {
 import LiveIndicator from '../components/LiveIndicator'
 import { rcaApi, usersApi } from '../lib/api'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
-import { formatDateTime } from '../lib/format'
+import { copyToClipboard } from '../lib/clipboard'
+import { formatDateTime, formatDuration } from '../lib/format'
 import { useToast } from '../hooks/useToast'
 
-/** One section of a finished RCA, set as readable text rather than a field.
+/** Inline `code spans` inside an RCA body.
  *
- * `whitespace-pre-wrap` keeps the paragraph breaks the author typed, and the
- * measure is capped near 80 characters - a root cause that runs the full width
- * of a wide monitor is written once and read never.
+ * RCA bodies are plain text, but a resolution is mostly commands and
+ * identifiers: `kubectl delete node vm-...-prod-1` set in the same face as the
+ * sentence around it is the difference between a step you can follow and a
+ * wall of prose. Backticks are the only markup honoured, because they are
+ * what people already type - nothing else is guessed at, so an RCA written
+ * without them reads exactly as it was written.
  */
-function Prose({ label, value }) {
+function RichText({ value }) {
+  if (value === null || value === undefined) return null
+  const parts = String(value).split(/(`[^`\n]+`)/g)
+  return parts.map((part, index) =>
+    part.length > 2 && part.startsWith('`') && part.endsWith('`') ? (
+      <code
+        key={index}
+        className="mx-px rounded border border-slate-200 bg-slate-100 px-1 py-px font-mono text-[0.85em] text-slate-800 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-200"
+      >
+        {part.slice(1, -1)}
+      </code>
+    ) : (
+      part
+    ),
+  )
+}
+
+// The status, as the hero's edge. Mirrors the badge's own colours so the two
+// never disagree; the badge carries the wording, this only reinforces it.
+const STATUS_ACCENT = {
+  completed: 'bg-emerald-500',
+  in_progress: 'bg-blue-500',
+  pending: 'bg-amber-500',
+  not_required: 'bg-slate-300 dark:bg-slate-600',
+  not_requested: 'bg-slate-300 dark:bg-slate-600',
+}
+
+/** One labelled fact in the hero's summary row. */
+function Fact({ icon: Icon, label, children }) {
   return (
-    <div>
-      <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+    <div className="min-w-0">
+      <dt className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+        <Icon size={12} aria-hidden="true" />
+        {label}
+      </dt>
+      <dd className="mt-0.5 truncate text-sm font-medium text-slate-800 dark:text-slate-100">
+        {children}
+      </dd>
+    </div>
+  )
+}
+
+// Spelled out rather than composed from a tone name: Tailwind only keeps the
+// class names it can see in the source, so `bg-${tone}-50` would ship as an
+// unstyled tile.
+const SECTION_TONE = {
+  cause:
+    'bg-rose-50 text-rose-600 ring-rose-200/70 dark:bg-rose-950/50 dark:text-rose-300 dark:ring-rose-900',
+  impact:
+    'bg-amber-50 text-amber-600 ring-amber-200/70 dark:bg-amber-950/50 dark:text-amber-300 dark:ring-amber-900',
+  fix:
+    'bg-emerald-50 text-emerald-600 ring-emerald-200/70 dark:bg-emerald-950/50 dark:text-emerald-300 dark:ring-emerald-900',
+  meta:
+    'bg-slate-100 text-slate-500 ring-slate-200/70 dark:bg-slate-800 dark:text-slate-400 dark:ring-slate-700',
+}
+
+/** One section of a finished RCA, set as a document rather than a form.
+ *
+ * The marks are joined by a rail so the sections read as one report in a fixed
+ * order - cause, impact, fix - which is the order the person on the next
+ * incident wants them in. The measure is capped near 80 characters: a root
+ * cause that runs the full width of a wide monitor is written once and read
+ * never.
+ */
+function Section({ icon: Icon, tone, label, value, rail = true, children }) {
+  return (
+    <section className="relative pl-11">
+      {rail ? (
+        <span
+          className="absolute bottom-[-1.5rem] left-[15px] top-9 w-px bg-slate-200 dark:bg-slate-800"
+          aria-hidden="true"
+        />
+      ) : null}
+      <span
+        className={clsx(
+          'absolute left-0 top-0 grid h-8 w-8 place-items-center rounded-lg ring-1',
+          SECTION_TONE[tone] || SECTION_TONE.meta,
+        )}
+        aria-hidden="true"
+      >
+        <Icon size={16} />
+      </span>
+      <h3 className="pt-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">
         {label}
       </h3>
-      {value ? (
-        <p className="max-w-[80ch] whitespace-pre-wrap text-sm leading-relaxed text-slate-800 dark:text-slate-100">
-          {value}
-        </p>
-      ) : (
-        <p className="text-sm italic text-slate-400">Not recorded.</p>
-      )}
-    </div>
+      <div className="mt-1.5">
+        {children ??
+          (value ? (
+            <p className="max-w-[80ch] whitespace-pre-wrap break-words text-[13.5px] leading-[1.65] text-slate-800 dark:text-slate-100">
+              <RichText value={value} />
+            </p>
+          ) : (
+            <p className="text-sm italic text-slate-400">Not recorded.</p>
+          ))}
+      </div>
+    </section>
   )
 }
 
@@ -84,6 +180,7 @@ export default function RcaDetail() {
   const [newAttachment, setNewAttachment] = useState({ label: '', url: '' })
   const [attachmentError, setAttachmentError] = useState(null)
   const [comment, setComment] = useState('')
+  const [copied, setCopied] = useState(false)
 
   const [draftNotice, setDraftNotice] = useState(null)
   const [assignOpen, setAssignOpen] = useState(false)
@@ -182,6 +279,51 @@ export default function RcaDetail() {
         }),
       'RCA saved.',
     )
+
+  // A finished RCA gets pasted into a ticket, a mail or a chat thread far more
+  // often than it gets read here, and re-typing four sections by hand is how
+  // they end up summarised into uselessness. Plain text, section order
+  // preserved, so it survives wherever it lands.
+  const report = useMemo(() => {
+    if (!rca) return ''
+    const lines = [
+      `RCA-${rca.id} — ${rca.endpoint_name || 'Incident'}`,
+      `Incident INC-${rca.incident_id}`,
+      '',
+      'ROOT CAUSE',
+      form.root_cause || 'Not recorded.',
+      '',
+      'CATEGORY',
+      CATEGORY_LABELS[form.root_cause_category] || 'Not categorised.',
+      '',
+      'IMPACT',
+      form.impact || 'Not recorded.',
+      '',
+      'RESOLUTION',
+      form.resolution || 'Not recorded.',
+    ]
+    if (actions.length) {
+      lines.push('', 'PREVENTIVE ACTIONS')
+      actions.forEach((action) => {
+        lines.push(`${action.done ? '[x]' : '[ ]'} ${action.text}`)
+      })
+    }
+    return lines.join('\n')
+  }, [rca, form, actions])
+
+  const doneCount = actions.filter((action) => action.done).length
+
+  const copyReport = async () => {
+    // copyToClipboard reports whether it ACTUALLY copied - on plain HTTP the
+    // clipboard API is simply absent, and a checkmark over nothing is worse
+    // than an error.
+    if (await copyToClipboard(report)) {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } else {
+      toast.error('Could not copy to the clipboard.')
+    }
+  }
 
   if (!rca && !error) {
     return (
@@ -309,37 +451,97 @@ export default function RcaDetail() {
         }
       />
 
-      {/* ---------------------------------------------- status banner */}
-      <div className="card mb-4 p-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <RcaStatusBadge status={rca.status} overdue={rca.is_overdue} />
-          <span className="text-sm text-slate-600 dark:text-slate-300">
-            Owner:{' '}
-            <span className="font-medium">
-              {rca.owner_label || 'Unassigned'}
-            </span>
-            {rca.owner_type ? (
-              <span className="text-slate-400"> ({rca.owner_type})</span>
+      {/* ------------------------------------------------------- hero */}
+      <div className="card relative mb-4 overflow-hidden">
+        {/* The status, carried as an edge the eye catches before it reads
+            anything. The badge next to it is what actually states it - this
+            is never the only signal. */}
+        <span
+          className={clsx(
+            'absolute inset-y-0 left-0 w-1',
+            rca.is_overdue
+              ? 'bg-red-500'
+              : STATUS_ACCENT[rca.status] || STATUS_ACCENT.not_requested,
+          )}
+          aria-hidden="true"
+        />
+        <div className="p-4 pl-5">
+          <div className="flex flex-wrap items-center gap-2">
+            <RcaStatusBadge status={rca.status} overdue={rca.is_overdue} />
+            {form.root_cause_category ? (
+              <span className="chip">
+                <Tag size={11} />
+                {CATEGORY_LABELS[form.root_cause_category] ||
+                  form.root_cause_category}
+              </span>
             ) : null}
-          </span>
-          {rca.due_at ? (
-            <span className="text-sm text-slate-500 dark:text-slate-400">
-              Due {formatDateTime(rca.due_at, 'dd MMM yyyy')}
-            </span>
-          ) : null}
-          {rca.completed_at ? (
-            <span className="text-sm text-slate-500 dark:text-slate-400">
-              Completed {formatDateTime(rca.completed_at)} by {rca.completed_by}
-            </span>
+          </div>
+
+          <dl className="mt-3.5 grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Fact icon={UserCog} label="Owner">
+              {rca.owner_label || (
+                <span className="text-slate-400">Unassigned</span>
+              )}
+              {rca.owner_type ? (
+                <span className="font-normal text-slate-400">
+                  {' '}
+                  · {rca.owner_type}
+                </span>
+              ) : null}
+            </Fact>
+            <Fact icon={CalendarClock} label="Due">
+              {rca.due_at ? (
+                <span className={clsx(rca.is_overdue && 'text-red-600 dark:text-red-400')}>
+                  {formatDateTime(rca.due_at, 'dd MMM yyyy')}
+                </span>
+              ) : (
+                // An RCA without a deadline is never overdue, which is worth
+                // saying outright rather than leaving as an em dash.
+                <span className="text-slate-400">No deadline</span>
+              )}
+            </Fact>
+            <Fact icon={ShieldCheck} label="Signed off">
+              {rca.completed_at ? (
+                <>
+                  {formatDateTime(rca.completed_at, 'dd MMM yyyy HH:mm')}
+                  {rca.completed_by ? (
+                    <span className="font-normal text-slate-400">
+                      {' '}
+                      by {rca.completed_by}
+                    </span>
+                  ) : null}
+                </>
+              ) : (
+                <span className="text-slate-400">Not yet</span>
+              )}
+            </Fact>
+            {/* Downtime, not the incident id - the id is in the page title
+                and the Evidence card, and how long it was down is the fact a
+                reader wants before any of the prose. */}
+            <Fact icon={Siren} label="Downtime">
+              {rca.incident?.duration_seconds ? (
+                <>
+                  {formatDuration(rca.incident.duration_seconds)}
+                  <span className="font-normal text-slate-400">
+                    {' '}
+                    · {rca.incident.failed_check_count ?? 0} failed checks
+                  </span>
+                </>
+              ) : rca.incident && !rca.incident.resolved_at ? (
+                <span className="text-red-600 dark:text-red-400">Still open</span>
+              ) : (
+                <span className="text-slate-400">Not recorded</span>
+              )}
+            </Fact>
+          </dl>
+
+          {rca.incident ? (
+            <p className="mt-3.5 border-t border-slate-100 pt-2.5 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+              RCA and incident lifecycles are independent — completing this
+              changes nothing about the incident.
+            </p>
           ) : null}
         </div>
-        {rca.incident ? (
-          <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
-            The incident is <span className="font-medium">{rca.incident.status}</span>.
-            RCA and incident lifecycles are independent — completing this changes
-            nothing about the incident.
-          </p>
-        ) : null}
       </div>
 
       {draftNotice ? (
@@ -351,19 +553,50 @@ export default function RcaDetail() {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         {/* --------------------------------------------------- form */}
         <div className="space-y-4 xl:col-span-2">
-          <Card title="Root cause analysis">
+          <Card
+            title="Root cause analysis"
+            actions={
+              readOnly ? (
+                <button
+                  type="button"
+                  className="btn-secondary btn-sm"
+                  onClick={copyReport}
+                  title="Copy the whole report as text"
+                >
+                  {copied ? <Check size={13} /> : <Copy size={13} />}
+                  {copied ? 'Copied' : 'Copy report'}
+                </button>
+              ) : null
+            }
+          >
             {readOnly ? (
               // Finished work is read, not edited. Scrolling a paragraph inside
               // a disabled textarea to find out what broke is the wrong shape
               // for the job, so a locked RCA renders as a document.
-              <div className="space-y-5">
-                <Prose label="Root cause" value={form.root_cause} />
-                <Prose
-                  label="Category"
-                  value={CATEGORY_LABELS[form.root_cause_category] || null}
+              <div className="space-y-6">
+                <Section
+                  icon={Search}
+                  tone="cause"
+                  label="Root cause"
+                  value={form.root_cause}
                 />
-                <Prose label="Impact" value={form.impact} />
-                <Prose label="Resolution" value={form.resolution} />
+                {/* No Category section: it is a one-word label, and the hero
+                    above already carries it as a chip where it can be scanned
+                    with the status rather than read in sequence. */}
+                <Section
+                  icon={Users}
+                  tone="impact"
+                  label="Impact"
+                  value={form.impact}
+                />
+                {/* Last section, so no rail below it - the document ends here. */}
+                <Section
+                  icon={Wrench}
+                  tone="fix"
+                  label="Resolution"
+                  value={form.resolution}
+                  rail={false}
+                />
               </div>
             ) : (
               <div className="space-y-3">
@@ -424,19 +657,48 @@ export default function RcaDetail() {
           </Card>
 
           {/* ----------------------------------- preventive actions */}
-          <Card title={`Preventive actions (${actions.length})`}>
+          <Card
+            title={
+              <span className="flex items-center gap-1.5">
+                <ClipboardList size={15} /> Preventive actions
+              </span>
+            }
+            actions={
+              actions.length ? (
+                // The count alone said nothing about whether any of them were
+                // actually done, which is the only interesting thing about a
+                // preventive-action list a month after the incident.
+                <span className="flex items-center gap-2">
+                  <span className="h-1.5 w-20 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+                    <span
+                      className="block h-full rounded-full bg-emerald-500 transition-all"
+                      style={{ width: `${(doneCount / actions.length) * 100}%` }}
+                    />
+                  </span>
+                  <span className="tnum text-xs text-slate-500 dark:text-slate-400">
+                    {doneCount}/{actions.length} done
+                  </span>
+                </span>
+              ) : null
+            }
+          >
             {actions.length === 0 ? (
               <p className="mb-3 text-sm text-slate-400">
                 Nothing recorded yet. These are what stop the same incident
                 happening a fourth time.
               </p>
             ) : (
-              <ul className="mb-3 space-y-1.5">
+              <ul className="mb-3 space-y-1">
                 {actions.map((action, index) => (
-                  <li key={index} className="flex items-start gap-2">
+                  // -mx-2 so the hover band reaches into the card's gutter
+                  // while the text stays aligned with everything above it.
+                  <li
+                    key={index}
+                    className="-mx-2 flex items-start gap-2.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60"
+                  >
                     <input
                       type="checkbox"
-                      className="mt-1 h-3.5 w-3.5 shrink-0 rounded border-slate-300"
+                      className="mt-0.5 rounded"
                       checked={Boolean(action.done)}
                       disabled={readOnly}
                       onChange={() => {
@@ -450,18 +712,21 @@ export default function RcaDetail() {
                     />
                     <span
                       className={clsx(
-                        'min-w-0 flex-1 text-sm',
+                        'min-w-0 flex-1 break-words text-sm leading-relaxed',
                         action.done
-                          ? 'text-slate-400 line-through'
+                          ? 'text-slate-400 line-through decoration-slate-300'
                           : 'text-slate-800 dark:text-slate-100',
                       )}
                     >
-                      {action.text}
+                      <RichText value={action.text} />
                     </span>
+                    {/* Faint rather than hidden-until-hover: there is no hover
+                        on a tablet, and a delete you cannot find is not a
+                        tidier list. */}
                     {!readOnly ? (
                       <button
                         type="button"
-                        className="shrink-0 text-slate-400 hover:text-red-600"
+                        className="shrink-0 rounded p-0.5 text-slate-300 transition-colors hover:text-red-600 dark:text-slate-600 dark:hover:text-red-400"
                         aria-label={`Remove: ${action.text}`}
                         onClick={() => {
                           setActions((current) => current.filter((_, i) => i !== index))
@@ -733,34 +998,42 @@ export default function RcaDetail() {
           ) : null}
 
           {/* timeline */}
-          <Card title={`Timeline (${timeline.length})`}>
+          <Card
+            title={
+              <span className="flex items-center gap-1.5">
+                <History size={15} /> Timeline ({timeline.length})
+              </span>
+            }
+          >
             {timeline.length === 0 ? (
               <p className="text-sm text-slate-400">
                 Generate a draft to assemble a timeline from the monitoring,
                 deployment and incident records.
               </p>
             ) : (
-              <ol className="space-y-2.5">
+              // One continuous rail behind the dots rather than a rule under
+              // each row: a sequence of events should look like a sequence.
+              // Drawn with ::before rather than a span, because an <ol> may
+              // only contain list items.
+              <ol className="relative space-y-3.5 pl-5 before:absolute before:inset-y-1.5 before:left-[3px] before:w-px before:bg-slate-200 before:content-[''] dark:before:bg-slate-700">
                 {timeline.map((entry, index) => (
-                  <li key={index} className="flex gap-2.5">
+                  <li key={index} className="relative">
                     <span
                       className={clsx(
-                        'mt-1.5 h-2 w-2 shrink-0 rounded-full',
+                        'absolute -left-5 top-1.5 h-[7px] w-[7px] rounded-full ring-2 ring-white dark:ring-slate-900',
                         timelineTone(entry.kind),
                       )}
                       aria-hidden="true"
                     />
-                    <div className="min-w-0 flex-1 border-b border-slate-100 pb-2 last:border-0 dark:border-slate-800">
-                      <p className="tnum text-[11px] text-slate-400">
-                        {entry.at ? formatDateTime(entry.at, 'dd MMM HH:mm:ss') : '—'}
-                        <span className="ml-1.5">
-                          · {TIMELINE_SOURCE_LABELS[entry.source] || entry.source}
-                        </span>
-                      </p>
-                      <p className="break-words text-sm text-slate-700 dark:text-slate-200">
-                        {entry.detail}
-                      </p>
-                    </div>
+                    <p className="tnum text-[11px] text-slate-400">
+                      {entry.at ? formatDateTime(entry.at, 'dd MMM HH:mm:ss') : '—'}
+                      <span className="ml-1.5">
+                        · {TIMELINE_SOURCE_LABELS[entry.source] || entry.source}
+                      </span>
+                    </p>
+                    <p className="break-words text-sm leading-relaxed text-slate-700 dark:text-slate-200">
+                      <RichText value={entry.detail} />
+                    </p>
                   </li>
                 ))}
               </ol>

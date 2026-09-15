@@ -92,7 +92,12 @@ class Settings(BaseSettings):
     ADMIN_FORCE_PASSWORD_CHANGE: bool = True
 
     # ------------------------------------------------------------ monitoring
-    DEFAULT_MONITOR_INTERVAL: int = 60
+    # Five minutes, not one. Most endpoints are not production, and a
+    # one-minute sweep over a large non-production estate is mostly load with
+    # no reader: the escalation rules in
+    # ``monitoring_service.resolve_check_interval`` are what make a failure
+    # visible quickly, so the healthy cadence does not have to be fast.
+    DEFAULT_MONITOR_INTERVAL: int = 300
     DEFAULT_TIMEOUT: int = 10
     MIN_MONITOR_INTERVAL: int = 30
     MAX_MONITOR_INTERVAL: int = 86400

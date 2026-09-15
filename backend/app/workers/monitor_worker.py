@@ -6,7 +6,10 @@ A separate process from the API. It repeatedly:
 2. probes them concurrently under a bounded semaphore,
 3. records each result, applies status transitions, manages incidents and
    raises alerts,
-4. schedules the next check with jitter.
+4. schedules the next check with jitter, at the cadence resolved for that
+   endpoint - its own interval while healthy, one minute while failing, and
+   one minute always in a fast-check environment (see
+   ``monitoring_service.resolve_check_interval``).
 
 Claiming uses ``SELECT ... FOR UPDATE SKIP LOCKED`` plus a short lease, so any
 number of worker replicas can run against the same database without ever
@@ -300,8 +303,13 @@ class MonitorWorker:
                         # Always re-arm the schedule and drop the lease, even
                         # if recording raised - otherwise a persistently
                         # failing endpoint would be retried in a tight loop.
-                        endpoint.next_check_at = monitoring_service.next_check_time(
-                            endpoint.interval_seconds
+                        # Resolved from the environment and the outcome just
+                        # recorded, not from the stored interval alone: a
+                        # production endpoint stays on the fast cadence, and
+                        # anything that just failed is retried quickly until
+                        # it passes.
+                        endpoint.next_check_at = monitoring_service.next_check_for(
+                            endpoint, config
                         )
                         endpoint.lease_expires_at = None
                         endpoint.leased_by = None

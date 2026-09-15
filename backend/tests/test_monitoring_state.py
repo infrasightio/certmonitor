@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from sqlalchemy import func, select
 
+from app.core.config import settings as env_settings
 from app.core.enums import (
     AlertType,
     CheckStatus,
@@ -677,3 +678,119 @@ class TestScheduling:
         assert all(53 <= offset <= 67 for offset in offsets)
         # Not all identical.
         assert len(set(round(o, 3) for o in offsets)) > 1
+
+
+class TestCadenceResolution:
+    """Which interval a given endpoint is actually checked at.
+
+    The rule the estate depends on: production is watched continuously, and
+    anything else escalates only while it is broken. Resolved per check rather
+    than stored, so these are pure-function tests over an endpoint and a
+    settings map.
+    """
+
+    @staticmethod
+    def _config(**overrides):
+        config = {
+            "default_monitor_interval": 300,
+            "fast_check_environments": ["production"],
+            "fast_check_interval": 60,
+            "failure_recheck_interval": 60,
+        }
+        config.update(overrides)
+        return config
+
+    @staticmethod
+    def _endpoint(*, interval=300, failures=0, environment=None):
+        endpoint = Endpoint(
+            name="cadence",
+            url="https://cadence.example.com/health",
+            hostname="cadence.example.com",
+            interval_seconds=interval,
+            consecutive_failures=failures,
+        )
+        # Assigned rather than passed to the constructor so no flush is needed:
+        # resolve_check_interval only reads the relationship.
+        endpoint.environment = environment
+        return endpoint
+
+    def test_healthy_non_production_stays_on_its_own_interval(self):
+        endpoint = self._endpoint(
+            interval=300, environment=Environment(name="staging")
+        )
+        assert (
+            monitoring_service.resolve_check_interval(endpoint, self._config()) == 300
+        )
+
+    def test_failing_non_production_escalates_to_the_recheck_interval(self):
+        endpoint = self._endpoint(
+            interval=300, failures=1, environment=Environment(name="staging")
+        )
+        assert (
+            monitoring_service.resolve_check_interval(endpoint, self._config()) == 60
+        )
+
+    def test_a_single_pass_drops_it_straight_back(self):
+        """No decay period: recovery returns to the slow cadence at once."""
+        endpoint = self._endpoint(
+            interval=300, failures=0, environment=Environment(name="staging")
+        )
+        assert (
+            monitoring_service.resolve_check_interval(endpoint, self._config()) == 300
+        )
+
+    @pytest.mark.parametrize("failures", [0, 1, 9])
+    def test_production_runs_fast_whether_or_not_it_is_failing(self, failures):
+        endpoint = self._endpoint(
+            interval=300, failures=failures, environment=Environment(name="production")
+        )
+        assert (
+            monitoring_service.resolve_check_interval(endpoint, self._config()) == 60
+        )
+
+    def test_environment_match_is_case_insensitive(self):
+        endpoint = self._endpoint(
+            interval=300, environment=Environment(name="Production")
+        )
+        assert (
+            monitoring_service.resolve_check_interval(endpoint, self._config()) == 60
+        )
+
+    def test_an_endpoint_with_no_environment_is_not_production(self):
+        endpoint = self._endpoint(interval=300, environment=None)
+        assert (
+            monitoring_service.resolve_check_interval(endpoint, self._config()) == 300
+        )
+
+    def test_neither_override_ever_slows_an_endpoint_down(self):
+        """Both rules are a ceiling on staleness, not a fixed cadence."""
+        fast_prod = self._endpoint(
+            interval=30, environment=Environment(name="production")
+        )
+        fast_failing = self._endpoint(
+            interval=30, failures=2, environment=Environment(name="staging")
+        )
+
+        assert monitoring_service.resolve_check_interval(fast_prod, self._config()) == 30
+        assert (
+            monitoring_service.resolve_check_interval(fast_failing, self._config()) == 30
+        )
+
+    def test_the_floor_holds_even_if_a_setting_is_mis_set(self):
+        endpoint = self._endpoint(
+            interval=300, failures=1, environment=Environment(name="staging")
+        )
+        resolved = monitoring_service.resolve_check_interval(
+            endpoint, self._config(failure_recheck_interval=1)
+        )
+        assert resolved == env_settings.MIN_MONITOR_INTERVAL
+
+    def test_next_check_for_applies_the_resolved_cadence(self):
+        endpoint = self._endpoint(
+            interval=1800, failures=1, environment=Environment(name="staging")
+        )
+        due = monitoring_service.next_check_for(endpoint, self._config())
+        offset = (due - datetime.now(timezone.utc)).total_seconds()
+
+        # 60s plus or minus the 10% jitter, nowhere near the configured 1800.
+        assert 53 <= offset <= 67

@@ -600,8 +600,8 @@ async def _run_health_check(
                     "post_deploy_record_failed",
                     endpoint=endpoint.name, error=str(exc),
                 )
-            endpoint.next_check_at = monitoring_service.next_check_time(
-                endpoint.interval_seconds
+            endpoint.next_check_at = monitoring_service.next_check_for(
+                endpoint, config
             )
         summary.append(result)
 

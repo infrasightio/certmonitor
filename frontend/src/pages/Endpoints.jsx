@@ -720,8 +720,16 @@ export default function Endpoints() {
 
                       <td className="whitespace-nowrap text-slate-600 dark:text-slate-300">
                         {formatRelative(endpoint.last_checked_at)}
+                        {/* The resolved cadence: this column sits next to
+                            "last checked", and a stated interval that does
+                            not match the gap between checks is worse than
+                            none. */}
                         <p className="text-[11px] text-slate-400">
-                          every {formatInterval(endpoint.interval_seconds)}
+                          every{' '}
+                          {formatInterval(
+                            endpoint.effective_interval_seconds ||
+                              endpoint.interval_seconds,
+                          )}
                         </p>
                       </td>
 

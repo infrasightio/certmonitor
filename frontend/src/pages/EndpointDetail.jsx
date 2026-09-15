@@ -507,6 +507,10 @@ export default function EndpointDetail() {
             value={formatRelative(endpoint.last_checked_at)}
             sub={formatDateTime(endpoint.last_checked_at)}
           />
+          {/* The RESOLVED cadence, not the configured one: a production
+              endpoint and a currently-failing one are both checked more often
+              than their interval says, and "every 5 minutes" above a next
+              check 40 seconds away reads as a bug. */}
           <Metric
             label="Next check"
             value={
@@ -514,7 +518,9 @@ export default function EndpointDetail() {
                 ? 'Paused'
                 : formatRelative(endpoint.next_check_at)
             }
-            sub={`every ${formatInterval(endpoint.interval_seconds)}`}
+            sub={`every ${formatInterval(
+              endpoint.effective_interval_seconds || endpoint.interval_seconds,
+            )}`}
           />
         </div>
 
@@ -1189,6 +1195,20 @@ export default function EndpointDetail() {
             </DetailRow>
             <DetailRow label="Interval">
               {formatInterval(endpoint.interval_seconds)}
+              {/* The configured value is what this row is for, but it is not
+                  always what runs. When the two differ, say so here rather
+                  than leaving the reader to wonder why checks arrive faster
+                  than the configuration claims. */}
+              {endpoint.effective_interval_seconds &&
+              endpoint.effective_interval_seconds !== endpoint.interval_seconds ? (
+                <span className="ml-1.5 text-xs text-slate-500 dark:text-slate-400">
+                  · currently every{' '}
+                  {formatInterval(endpoint.effective_interval_seconds)}
+                  {endpoint.consecutive_failures > 0
+                    ? ' while it is failing'
+                    : ` in ${endpoint.environment?.display_name || endpoint.environment?.name || 'this environment'}`}
+                </span>
+              ) : null}
             </DetailRow>
             <DetailRow label="Timeout">{endpoint.timeout_seconds}s</DetailRow>
             <DetailRow label="Owner">

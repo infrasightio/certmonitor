@@ -55,6 +55,7 @@ const CATEGORY_META = {
 /** Settings stored as a list of strings, edited as comma-separated text. */
 const STRING_LIST_SETTINGS = {
   change_approval_environments: 'production, staging',
+  fast_check_environments: 'production',
   health_path_candidates: '/health, /healthz, /ready, /actuator/health',
 }
 
@@ -533,6 +534,18 @@ export default function SettingsPage() {
                   </div>
                 ))}
               </div>
+              {category === 'monitoring' ? (
+                <p className="mt-3 rounded-lg bg-brand-50 px-2.5 py-2 text-xs text-brand-800 dark:bg-brand-900/25 dark:text-brand-200">
+                  How often an endpoint is actually checked is resolved at each
+                  check, not fixed when it was created. An endpoint in a
+                  fast-check environment runs at the fast interval whether it
+                  is passing or failing; anything else runs at its own
+                  interval until a check fails, then rechecks at the failing
+                  interval until it passes again. Neither override ever slows
+                  an endpoint down — an endpoint configured to run more often
+                  keeps its own interval.
+                </p>
+              ) : null}
               {category === 'ssl' ? (
                 <p className="mt-3 rounded-lg bg-brand-50 px-2.5 py-2 text-xs text-brand-800 dark:bg-brand-900/25 dark:text-brand-200">
                   Changing an SSL threshold re-grades every stored certificate

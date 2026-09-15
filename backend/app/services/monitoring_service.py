@@ -26,6 +26,7 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.enums import (
     AlertType,
     CheckStatus,
@@ -784,6 +785,73 @@ async def regrade_certificates(
         await session.flush()
         logger.info("certificates_regraded", updated=updated)
     return updated
+
+
+# ------------------------------------------------------------- scheduling
+def is_fast_check_environment(endpoint: Endpoint, config: dict[str, Any]) -> bool:
+    """Is this endpoint in an environment that is watched continuously?
+
+    Matched on the environment's name, case-insensitively, against
+    ``fast_check_environments``. An endpoint with no environment is never
+    treated as production - guessing that from a URL would be worse than
+    making the operator say so.
+    """
+    environment = endpoint.environment
+    if environment is None or not environment.name:
+        return False
+    names = config.get("fast_check_environments") or []
+    if isinstance(names, str):  # a hand-edited row, tolerated rather than raising
+        names = [names]
+    wanted = {str(name).strip().lower() for name in names if str(name).strip()}
+    return environment.name.strip().lower() in wanted
+
+
+def resolve_check_interval(endpoint: Endpoint, config: dict[str, Any]) -> int:
+    """How many seconds until this endpoint should be checked again.
+
+    Three cadences, resolved here rather than stored on the row so a settings
+    change takes effect on the next check instead of needing a backfill:
+
+    * **A fast-check environment** (production by default) runs at
+      ``fast_check_interval`` whether the last check passed or failed. The
+      point of production monitoring is to notice the first failure quickly,
+      which cannot happen if the fast cadence only starts after one.
+    * **Anything that just failed** runs at ``failure_recheck_interval``
+      until it passes, then drops straight back to its own interval on the
+      first success. A five-minute interval would otherwise mean a
+      five-minute-old view of an outage, and five minutes of guessing whether
+      it has recovered.
+    * **Anything else** runs at its own configured interval.
+
+    Every rule that applies takes the *smaller* of the two values, so this is
+    only ever a ceiling on staleness: an endpoint deliberately set to 30
+    seconds is not slowed to 60 by being in production, and a failing
+    production endpoint gets whichever of the two intervals is shorter.
+    """
+    interval = int(
+        endpoint.interval_seconds
+        or config.get("default_monitor_interval")
+        or settings.DEFAULT_MONITOR_INTERVAL
+    )
+
+    if is_fast_check_environment(endpoint, config):
+        interval = min(interval, int(config.get("fast_check_interval", 60)))
+    if (endpoint.consecutive_failures or 0) > 0:
+        interval = min(interval, int(config.get("failure_recheck_interval", 60)))
+
+    # The floor is the same one the API enforces on a configured interval, so
+    # a mis-set setting cannot turn the monitor into a load generator.
+    return max(settings.MIN_MONITOR_INTERVAL, interval)
+
+
+def next_check_for(endpoint: Endpoint, config: dict[str, Any]) -> datetime:
+    """The resolved cadence, as a jittered due time.
+
+    Every scheduling site goes through here rather than reading
+    ``interval_seconds`` directly, so the three cadences cannot drift apart
+    between the worker, a manual check and a post-deployment health check.
+    """
+    return next_check_time(resolve_check_interval(endpoint, config))
 
 
 def next_check_time(interval_seconds: int, *, jitter_ratio: float = 0.1) -> datetime:

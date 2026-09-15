@@ -107,6 +107,11 @@ async def list_endpoints(
     session: DbSession,
     _user: ReadEndpoints,
     page: Pagination,
+    # Only to resolve each row's real check cadence. The settings map is cached
+    # in-process for a few seconds, so this adds no query to the hot list
+    # endpoint. Declared before the query parameters because a dependency has
+    # no default and must precede the ones that do.
+    config: RuntimeConfig,
     search: Annotated[
         str | None,
         Query(description="Matches name, URL, hostname, description, owner or team."),
@@ -179,6 +184,9 @@ async def list_endpoints(
             row,
             uptime_percent=uptime_map.get(row.id),
             has_open_incident=row.id in open_incidents,
+            effective_interval_seconds=monitoring_service.resolve_check_interval(
+                row, config
+            ),
         )
         for row in rows
     ]
@@ -297,7 +305,13 @@ async def create_endpoint(
     )
     await session.commit()
     await session.refresh(endpoint, ["tags", "environment", "dependencies"])
-    return endpoint_to_read(endpoint, created_by=user.username)
+    return endpoint_to_read(
+        endpoint,
+        created_by=user.username,
+        effective_interval_seconds=monitoring_service.resolve_check_interval(
+            endpoint, config
+        ),
+    )
 
 
 # --------------------------------------------------------------- retrieve
@@ -305,7 +319,10 @@ async def create_endpoint(
     "/{endpoint_id}", response_model=EndpointRead, summary="Endpoint details"
 )
 async def get_endpoint(
-    endpoint_id: uuid.UUID, session: DbSession, _user: ReadEndpoints
+    endpoint_id: uuid.UUID,
+    session: DbSession,
+    _user: ReadEndpoints,
+    config: RuntimeConfig,
 ) -> EndpointRead:
     endpoint = await _load_endpoint(session, endpoint_id)
     uptime = await stats_service.uptime_for_endpoints(
@@ -316,6 +333,9 @@ async def get_endpoint(
         endpoint,
         uptime_percent=uptime.get(endpoint.id),
         has_open_incident=endpoint.id in open_incidents,
+        effective_interval_seconds=monitoring_service.resolve_check_interval(
+            endpoint, config
+        ),
     )
 
 
@@ -359,7 +379,13 @@ async def update_endpoint(
     )
     await session.commit()
     await session.refresh(endpoint, ["tags", "environment", "dependencies"])
-    return endpoint_to_read(endpoint, updated_by=user.username)
+    return endpoint_to_read(
+        endpoint,
+        updated_by=user.username,
+        effective_interval_seconds=monitoring_service.resolve_check_interval(
+            endpoint, config
+        ),
+    )
 
 
 @router.patch(
@@ -373,6 +399,7 @@ async def set_monitoring_state(
     user: WriteEndpoints,
     request: Request,
     session: DbSession,
+    config: RuntimeConfig,
 ) -> EndpointRead:
     endpoint = await _load_endpoint(session, endpoint_id)
     before = {
@@ -429,7 +456,12 @@ async def set_monitoring_state(
     )
     await session.commit()
     await session.refresh(endpoint, ["tags", "environment", "dependencies"])
-    return endpoint_to_read(endpoint)
+    return endpoint_to_read(
+        endpoint,
+        effective_interval_seconds=monitoring_service.resolve_check_interval(
+            endpoint, config
+        ),
+    )
 
 
 # ----------------------------------------------------------------- delete
@@ -519,10 +551,10 @@ async def check_endpoint_now(
             recorded.incident_closed.id if recorded.incident_closed else None
         )
         # Keep the endpoint on its normal cadence rather than counting the
-        # manual check as the scheduled one.
-        endpoint.next_check_at = monitoring_service.next_check_time(
-            endpoint.interval_seconds
-        )
+        # manual check as the scheduled one - "normal" being the resolved
+        # cadence, so a manual check that finds a failure leaves the endpoint
+        # on the fast recheck rather than back on its slow interval.
+        endpoint.next_check_at = monitoring_service.next_check_for(endpoint, config)
 
     await audit_service.record(
         session,

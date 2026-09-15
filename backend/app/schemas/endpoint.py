@@ -393,6 +393,12 @@ class EndpointListItem(ORMModel):
     # "/actuator/health". The endpoint's own `url` is left as configured.
     resolved_health_path: str | None = None
     interval_seconds: int
+    # What the endpoint is ACTUALLY checked at right now, which is not always
+    # `interval_seconds`: a fast-check environment and a currently-failing
+    # endpoint are both checked more often. Resolved per request by
+    # monitoring_service.resolve_check_interval, so a screen can report the
+    # real cadence instead of the configured one.
+    effective_interval_seconds: int | None = None
     timeout_seconds: int
 
     current_status: str
@@ -585,15 +591,20 @@ class EndpointFilterOptions(BaseModel):
     allowed_intervals: list[int] = Field(default_factory=list)
 
 
+# `effective_interval_seconds` is passed in rather than computed here: it comes
+# from monitoring_service, and a schema module importing a service would close
+# an import cycle. The route layer already holds the runtime config anyway.
 def endpoint_to_list_item(
     endpoint: Any,
     *,
     uptime_percent: float | None = None,
     has_open_incident: bool = False,
+    effective_interval_seconds: int | None = None,
 ) -> EndpointListItem:
     item = EndpointListItem.model_validate(endpoint)
     item.uptime_percent_24h = uptime_percent
     item.has_open_incident = has_open_incident
+    item.effective_interval_seconds = effective_interval_seconds
     return item
 
 
@@ -604,6 +615,7 @@ def endpoint_to_read(
     has_open_incident: bool = False,
     created_by: str | None = None,
     updated_by: str | None = None,
+    effective_interval_seconds: int | None = None,
 ) -> EndpointRead:
     model = EndpointRead.model_validate(endpoint)
     model.has_auth_secret = bool(endpoint.auth_secret_encrypted)
@@ -611,4 +623,5 @@ def endpoint_to_read(
     model.has_open_incident = has_open_incident
     model.created_by = created_by
     model.updated_by = updated_by
+    model.effective_interval_seconds = effective_interval_seconds
     return model
