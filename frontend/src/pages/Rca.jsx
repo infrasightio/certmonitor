@@ -64,7 +64,7 @@ function Tile({ label, value, tone = 'neutral', onClick, to, active, hint }) {
   )
 
   const base = 'card p-3 text-left'
-  const interactive = 'transition-shadow hover:shadow-md'
+  const interactive = 'card-interactive'
 
   if (to) {
     return (

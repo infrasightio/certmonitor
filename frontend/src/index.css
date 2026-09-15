@@ -2,19 +2,28 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Design tokens. Defined once here so light and dark themes stay consistent
-   and every component reads the same variables. */
 /*
- * Light mode is built on a tinted ground rather than white.
+ * Surfaces and elevation.
  *
- * With a white page, white cards and white tables, every surface sat at the
- * same value: nothing separated, and the whole screen read as one bright
- * sheet. Dropping the page to a soft blue-grey and leaving cards white gives
- * the panels something to lift off, which is what makes a dense operations
- * screen legible for an eight-hour shift.
+ * The colour ramp lives in tailwind.config.js; these are the handful of roles
+ * it gets used in, named once so light and dark cannot disagree about which
+ * shade is "the page" and which is "a card". Anything structural reads these
+ * variables; anything incidental reads a slate-* utility.
  *
- * The neutrals are pulled slightly toward the brand blue rather than being
- * pure grey, so the palette reads as coloured without anything shouting.
+ * LIGHT - the mode this was designed in:
+ *
+ *   sunken   the page ground       a cool off-white
+ *   surface  cards, the shell      white
+ *   muted    card and table heads  a whisper above the card
+ *   border   every hairline
+ *
+ * A white page with white cards has no elevation to read: every surface sits
+ * at the same value and the screen becomes one bright sheet. Dropping the page
+ * a few percent and leaving cards white gives the panels something to lift
+ * off, which is what keeps a dense operations screen legible for a whole
+ * shift. The step is deliberately small - the previous ground was dark and
+ * blue enough that the page read as the object and the cards as holes cut in
+ * it.
  */
 @layer base {
   :root {
@@ -26,25 +35,34 @@
 
     --surface: 255 255 255;
     --surface-raised: 255 255 255;
-    /* Page ground: a touch of blue in the grey, dark enough that white cards
-       read as raised without needing a heavy shadow. */
-    --surface-sunken: 233 238 246;
-    --surface-muted: 241 245 251;
-    --border: 214 223 237;
-    --text: 15 23 42;
-    --text-muted: 90 105 130;
+    --surface-sunken: 241 244 249;
+    /* Exactly slate-50, so a `bg-slate-50` panel written inline and a card
+       header written through a token land on the same value. There is one
+       faint tint in this system, not two that nearly match. */
+    --surface-muted: 246 247 250;
+    /* slate-200. */
+    --border: 221 225 233;
+    /* A second, fainter rule for dividers INSIDE a panel - table rows, list
+       items - so an internal separator never competes with the panel's own
+       edge. */
+    --border-subtle: 236 238 243;
+    --text: 23 27 36;
+    --text-muted: 98 108 132;
+    --accent: 62 76 198;
   }
 
   .dark {
     color-scheme: dark;
 
-    --surface: 15 23 42;
-    --surface-raised: 30 41 59;
-    --surface-sunken: 2 6 23;
-    --surface-muted: 30 41 59;
-    --border: 51 65 85;
-    --text: 241 245 249;
-    --text-muted: 148 163 184;
+    --surface: 23 27 36;
+    --surface-raised: 38 44 56;
+    --surface-sunken: 14 17 24;
+    --surface-muted: 38 44 56;
+    --border: 57 64 79;
+    --border-subtle: 38 44 56;
+    --text: 241 244 249;
+    --text-muted: 124 133 155;
+    --accent: 122 141 235;
   }
 
   html {
@@ -54,13 +72,25 @@
   body {
     background-color: rgb(var(--surface-sunken));
     @apply text-slate-900 antialiased dark:text-slate-100;
+    /* cv11 gives Inter its single-storey g and a, which hold up better at the
+       11-13px this product spends most of its time at. */
     font-feature-settings: 'cv11', 'ss01';
   }
 
   /* A visible focus ring everywhere: this is an operations tool, and it must
-     be fully keyboard navigable during an incident. */
+     be fully keyboard navigable during an incident. The offset is painted in
+     whatever surface the control sits on, so the ring reads as a halo rather
+     than a white gap on a tinted panel. */
   :focus-visible {
-    @apply outline-none ring-2 ring-brand-500 ring-offset-2 ring-offset-white dark:ring-offset-slate-900;
+    @apply outline-none ring-2 ring-brand-500 ring-offset-2;
+    --tw-ring-offset-color: rgb(var(--surface));
+  }
+
+  /* Selection picks up the brand rather than the browser's default blue,
+     which would otherwise be the one colour on screen nobody chose. */
+  ::selection {
+    background-color: rgb(var(--accent) / 0.18);
+    color: rgb(var(--text));
   }
 
   /* Tabular numerals stop metric columns from jittering as values change. */
@@ -68,11 +98,19 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* A little negative tracking on headings. At the sizes this product sets
+     them, default tracking makes a title look like body text that happens to
+     be bold. */
+  h1,
+  h2 {
+    letter-spacing: -0.011em;
+  }
+
   /* One checkbox, everywhere. Checkboxes appear in bulk-select columns, alert
      rules, import previews and preventive actions - each had grown its own
      size and border, so the same control looked different on every screen.
-     `accent-color` paints the checked state in the brand blue and lets the
-     browser handle the tick, which stays crisp at any zoom. */
+     `accent-color` paints the checked state in the brand and lets the browser
+     handle the tick, which stays crisp at any zoom. */
   input[type='checkbox'],
   input[type='radio'] {
     @apply h-4 w-4 shrink-0 cursor-pointer border-slate-300 dark:border-slate-600;
@@ -83,61 +121,127 @@
   input[type='radio']:disabled {
     @apply cursor-not-allowed opacity-60;
   }
+
+  /*
+   * Scrollbars.
+   *
+   * The OS default is a light-grey bar in a light-grey trough that neither
+   * theme chose, and on a long endpoints table it is a permanent stripe down
+   * the side of the page. Thin, transparent-troughed and drawn in the border
+   * colour, it stops being furniture. Firefox takes the standard property;
+   * WebKit needs its own.
+   */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--border)) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    height: 10px;
+    width: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: rgb(var(--border));
+    /* A transparent border clipped to the content box is what makes the thumb
+       look inset rather than edge-to-edge. */
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(var(--text-muted) / 0.55);
+  }
 }
 
 @layer components {
-  /* White against the tinted ground, so panels read as raised from the
-     page rather than merging into it. */
+  /* ------------------------------------------------------------ surfaces */
+
+  /* White against the cool ground, with a hairline AND a contact shadow.
+     Either alone is ambiguous at this little contrast: the border gives the
+     card a definite edge, the shadow says which side of it is on top. */
   .card {
-    @apply rounded-xl border bg-white shadow-card dark:border-slate-800 dark:bg-slate-900;
+    @apply rounded-xl border bg-white shadow-card dark:bg-slate-900;
     border-color: rgb(var(--border));
   }
 
-  /* A faintly tinted strip, so a card header is distinguishable from the
-     content under it without needing a heavier rule. */
+  /* A card whose whole body is a link or a control. Kept off `.card` itself
+     because most cards are not interactive and should not lift under a cursor
+     that merely crosses them. */
+  .card-interactive {
+    @apply transition-shadow duration-150 hover:shadow-raised;
+  }
+
+  /* Faintly tinted, so a card header is distinguishable from the content
+     under it without needing a heavier rule. Barely a tint in light mode -
+     enough to separate, not enough to read as a toolbar. */
   .card-header {
-    @apply flex items-center justify-between gap-3 rounded-t-xl border-b px-4 py-3
-           dark:border-slate-800 dark:bg-slate-900;
+    @apply flex items-center justify-between gap-3 rounded-t-xl border-b px-4 py-3;
     border-color: rgb(var(--border));
-    background-color: rgb(var(--surface-muted) / 0.7);
+    background-color: rgb(var(--surface-muted));
   }
 
   .card-title {
     @apply text-sm font-semibold text-slate-900 dark:text-slate-100;
   }
 
+  /* ------------------------------------------------------------- buttons */
+
   .btn {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium
-           transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex select-none items-center justify-center gap-1.5 rounded-lg px-3 py-2
+           text-sm font-medium transition-colors duration-100
+           disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none;
   }
 
   .btn-primary {
-    @apply btn bg-brand-600 text-white hover:bg-brand-700 active:bg-brand-800;
+    @apply btn bg-brand-600 text-white shadow-btn hover:bg-brand-700 active:bg-brand-800;
   }
 
+  /* A white fill and a hairline, so a toolbar of six secondary buttons does
+     not read as six primaries competing for the same click. */
   .btn-secondary {
-    @apply btn border border-slate-300 bg-white text-slate-700 hover:bg-slate-50
-           dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700;
+    @apply btn border border-slate-200 bg-white text-slate-700 shadow-btn
+           hover:border-slate-300 hover:bg-slate-50 active:bg-slate-100
+           dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200
+           dark:hover:border-slate-600 dark:hover:bg-slate-700;
   }
 
   .btn-danger {
-    @apply btn bg-red-600 text-white hover:bg-red-700;
+    @apply btn bg-red-600 text-white shadow-btn hover:bg-red-700 active:bg-red-800;
   }
 
   .btn-ghost {
-    @apply btn text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800;
+    @apply btn text-slate-600 hover:bg-slate-100 hover:text-slate-900
+           active:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-800
+           dark:hover:text-slate-50;
   }
 
   .btn-sm {
     @apply px-2 py-1 text-xs;
   }
 
+  /* ---------------------------------------------------------------- form */
+
+  /*
+   * A three-pixel focus halo rather than a one-pixel outline. At 13px type on
+   * a dense form a hairline ring is easy to lose, and "which field am I in"
+   * is the question a keyboard user asks most often. The border takes the
+   * brand at the same time, so the field still reads as focused where the
+   * halo overlaps a neighbouring control.
+   */
   .input {
     @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900
-           placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1
-           focus:ring-brand-500 disabled:bg-slate-100
-           dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500
-           dark:disabled:bg-slate-900;
+           transition-shadow duration-100 placeholder:text-slate-400
+           focus:border-brand-500 focus:outline-none focus:ring-[3px] focus:ring-brand-500/20
+           focus:ring-offset-0
+           disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500
+           dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100
+           dark:placeholder:text-slate-500 dark:disabled:bg-slate-900;
   }
 
   .label {
@@ -151,6 +255,8 @@
   .field-error {
     @apply mt-1 text-xs font-medium text-red-600 dark:text-red-400;
   }
+
+  /* --------------------------------------------------------------- table */
 
   .table-wrap {
     /* Wide tables scroll inside their own container; the page body never
@@ -181,46 +287,64 @@
      utility at 0,1,0 - meaning no header could ever opt out of text-left,
      and every numeric column ended up with a left-aligned header sitting
      above right-aligned values. With :where(), per-cell utilities win. */
-  /* Tinted, and the label picks up the brand hue: a header row should be
-     obviously a header, not white text furniture on a white table. */
+  /* Small, tracked and quiet: a header row's job is to be findable while
+     scanning the values under it, not to be read. */
   :where(.table thead th) {
-    @apply sticky top-0 z-10 whitespace-nowrap border-b px-3 py-2
-           text-left text-xs font-semibold uppercase tracking-wide text-slate-600
-           dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400;
+    @apply sticky top-0 z-10 whitespace-nowrap border-b px-3 py-2.5
+           text-left text-[11px] font-semibold uppercase tracking-[0.06em]
+           text-slate-500 dark:text-slate-400;
     border-color: rgb(var(--border));
     background-color: rgb(var(--surface-muted));
   }
 
+  /* Rows separated by the fainter rule: at twenty rows the divider is read as
+     texture, and the panel's own edge has to stay the strongest line on the
+     card. */
   :where(.table tbody td) {
-    @apply border-b border-slate-100 px-3 py-2 align-middle dark:border-slate-800/70;
+    @apply px-3 py-2.5 align-middle;
+    border-bottom: 1px solid rgb(var(--border-subtle));
   }
 
   /* Brand-tinted rather than grey, so the row under the cursor is
-     unmistakable while scanning a long table. */
+     unmistakable while scanning a long table - but held well below the chips
+     and badges sitting in the row, which are what the eye is actually
+     hunting for. */
   :where(.table tbody tr):hover {
-    @apply bg-brand-50/70 dark:bg-slate-800/40;
+    @apply bg-brand-50/60 dark:bg-slate-800/50;
   }
+
+  /* --------------------------------------------------------------- marks */
 
   .badge {
     @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium;
   }
 
   /* Chips label a lot of rows, so a faint brand tint carries them without
-     adding another grey to an already grey table. */
+     adding another grey to an already grey table. The inset ring gives the
+     chip an edge on a white card, where a tint this light has none of its
+     own. */
   .chip {
     @apply inline-flex items-center gap-1 rounded-md bg-brand-50 px-1.5 py-0.5 text-[11px]
-           font-medium text-brand-800 dark:bg-slate-800 dark:text-slate-300;
+           font-medium text-brand-800 ring-1 ring-inset ring-brand-100
+           dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700;
   }
+
+  /* ----------------------------------------------------------------- nav */
 
   .nav-link {
     @apply flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-600
-           transition-colors hover:bg-brand-50 hover:text-brand-700
+           transition-colors duration-100 hover:bg-slate-100 hover:text-slate-900
            dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100;
   }
 
+  /* The active item should be readable from the far side of a desk: brand
+     tint, brand text, one weight heavier, and a ring so it keeps an edge
+     where the fill is too faint to show one. */
   .nav-link-active {
-    @apply bg-brand-50 text-brand-700 hover:bg-brand-50 hover:text-brand-700
-           dark:bg-brand-900/30 dark:text-brand-300 dark:hover:bg-brand-900/30;
+    @apply bg-brand-50 font-semibold text-brand-700 ring-1 ring-inset ring-brand-100
+           hover:bg-brand-50 hover:text-brand-700
+           dark:bg-brand-950 dark:text-brand-300 dark:ring-brand-900
+           dark:hover:bg-brand-950 dark:hover:text-brand-300;
   }
 
   .skeleton {

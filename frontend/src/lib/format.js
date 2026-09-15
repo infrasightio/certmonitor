@@ -159,27 +159,38 @@ export function humanise(value, map) {
   return map?.[value] || String(value).replace(/_/g, ' ')
 }
 
-/** Chart colour for a status; matches the Tailwind semantic palette. */
+/** Chart colour for a status; matches the Tailwind semantic palette.
+ *
+ * The health colours are fixed and deliberately unthemed - green means up on
+ * every screen and in every mode, and a theme that could retint it would make
+ * that promise conditional. Only the neutrals here step with the ramp in
+ * tailwind.config.js: they are absence-of-state, not a state.
+ */
 export const STATUS_COLORS = {
   up: '#16a34a',
   down: '#dc2626',
   degraded: '#d97706',
-  unknown: '#64748b',
-  paused: '#94a3b8',
+  unknown: '#626c84',
+  paused: '#7c859b',
   valid: '#16a34a',
   expiring_soon: '#d97706',
   critical: '#ea580c',
   expired: '#dc2626',
   invalid: '#b91c1c',
-  unable_to_check: '#64748b',
-  not_applicable: '#cbd5e1',
+  unable_to_check: '#626c84',
+  not_applicable: '#c5cbd8',
 }
 
-/** Deterministic colour for a tag name, so a tag looks the same everywhere. */
+/** Deterministic colour for a tag name, so a tag looks the same everywhere.
+ *
+ * Eight hues held at a similar depth, so no tag is louder than its neighbour
+ * and none of them outshouts a status badge in the same row. The first slot
+ * is the brand, so the most common tag in a deployment tends to land on it.
+ */
 export function tagColor(name) {
   const palette = [
-    '#2563eb', '#7c3aed', '#0891b2', '#059669',
-    '#d97706', '#dc2626', '#db2777', '#4f46e5',
+    '#3e4cc6', '#7c3aed', '#0e7490', '#047857',
+    '#b45309', '#be123c', '#a21caf', '#1d4ed8',
   ]
   let hash = 0
   for (let i = 0; i < String(name).length; i += 1) {

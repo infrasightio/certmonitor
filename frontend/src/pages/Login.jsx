@@ -192,10 +192,13 @@ export default function Login() {
             nothing moves for anyone who asked that it not. */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 opacity-[0.18]"
+          className="pointer-events-none absolute inset-0 opacity-[0.22]"
           style={{
+            // brand-500 and brand-700. Indigo on graphite is a quieter pairing
+            // than the blue this used to use, so the opacity is a touch higher
+            // to keep the same amount of depth.
             backgroundImage:
-              'radial-gradient(circle at 18% 22%, #3b82f6 0, transparent 42%), radial-gradient(circle at 82% 78%, #1d4ed8 0, transparent 46%)',
+              'radial-gradient(circle at 18% 22%, #5666dd 0, transparent 42%), radial-gradient(circle at 82% 78%, #333fa3 0, transparent 46%)',
           }}
         />
         <div

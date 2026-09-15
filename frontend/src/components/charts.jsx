@@ -65,8 +65,12 @@ export const STATUS = {
  * recessive so the data carries the contrast.
  */
 const CHROME = {
-  light: { grid: '#dde4ee', axis: '#a8b4c6', muted: '#64748b', surface: '#ffffff' },
-  dark: { grid: '#2c2c2a', axis: '#383835', muted: '#898781', surface: '#0f172a' },
+  // Stepped off the neutral ramp in tailwind.config.js: grid = slate-200,
+  // axis = slate-300, labels = slate-500, surface = the card the chart sits
+  // on. Written as hex because Recharts takes colours as values, not classes -
+  // if the ramp moves, these move with it.
+  light: { grid: '#dde1e9', axis: '#c5cbd8', muted: '#626c84', surface: '#ffffff' },
+  dark: { grid: '#262c38', axis: '#39404f', muted: '#7c859b', surface: '#171b24' },
 }
 
 /** Tracks the `dark` class the layout toggles, so charts restep their colours. */
@@ -120,7 +124,7 @@ function axisProps(chrome) {
 /** Tooltip shell: one surface, hairline ring, no drop shadow theatre. */
 function TooltipShell({ title, rows }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs shadow-lg dark:border-slate-700 dark:bg-slate-800">
+    <div className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs shadow-pop dark:border-slate-700 dark:bg-slate-800">
       {title ? (
         <p className="mb-1 font-medium text-slate-900 dark:text-slate-100">{title}</p>
       ) : null}
@@ -447,7 +451,7 @@ const STATUS_ORDER = [
   { key: 'degraded', label: 'Degraded', color: STATUS.warning },
   { key: 'down', label: 'Down', color: STATUS.critical },
   { key: 'unknown', label: 'Unknown', color: STATUS.neutral },
-  { key: 'paused', label: 'Paused', color: '#cbd5e1' },
+  { key: 'paused', label: 'Paused', color: '#c5cbd8' },
 ]
 
 /**

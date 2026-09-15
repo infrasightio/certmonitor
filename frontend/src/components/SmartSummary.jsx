@@ -53,7 +53,7 @@ function Tile({ icon: Icon, label, value, tone, to }) {
     </>
   )
   const className =
-    'card flex items-center gap-3 p-3 text-left transition-shadow hover:shadow-md'
+    'card card-interactive flex items-center gap-3 p-3 text-left'
   return to ? (
     <Link to={to} className={className}>
       {body}

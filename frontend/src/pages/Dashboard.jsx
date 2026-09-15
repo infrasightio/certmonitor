@@ -76,7 +76,7 @@ function StatTile({ icon: Icon, label, value, sub, tone = 'neutral', to }) {
   // row, but without this the card inside sizes to its own content, so a
   // tile with no sub-line ends up visibly shorter than its neighbours.
   const body = (
-    <div className="card flex h-full items-center gap-3 p-3.5 transition-shadow hover:shadow-md">
+    <div className="card card-interactive flex h-full items-center gap-3 p-3.5">
       <span className={clsx('grid h-9 w-9 shrink-0 place-items-center rounded-lg', iconTones[tone])}>
         <Icon size={18} />
       </span>

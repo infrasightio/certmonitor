@@ -85,7 +85,7 @@ export default function InfraSearch() {
             <button
               key={example}
               type="button"
-              className="chip hover:bg-slate-200 dark:hover:bg-slate-700"
+              className="chip transition-colors hover:bg-brand-100 dark:hover:bg-slate-700"
               onClick={() => run(example)}
             >
               {example}

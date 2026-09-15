@@ -22,7 +22,8 @@ const EMPTY = {
   name: '',
   display_name: '',
   description: '',
-  color: '#2563eb',
+  // The brand, so an environment created without a colour is still on-theme.
+  color: '#3e4cc6',
   sort_order: 100,
   is_active: true,
   failure_threshold: '',
@@ -67,7 +68,7 @@ export default function EnvironmentsPage() {
             name: environment.name,
             display_name: environment.display_name || '',
             description: environment.description || '',
-            color: environment.color || '#2563eb',
+            color: environment.color || '#3e4cc6',
             sort_order: environment.sort_order ?? 100,
             is_active: environment.is_active,
             failure_threshold: environment.failure_threshold ?? '',
@@ -196,7 +197,7 @@ export default function EnvironmentsPage() {
                       <div className="flex items-center gap-2">
                         <span
                           className="h-2.5 w-2.5 shrink-0 rounded-full"
-                          style={{ backgroundColor: environment.color || '#94a3b8' }}
+                          style={{ backgroundColor: environment.color || '#7c859b' }}
                           aria-hidden="true"
                         />
                         <div>

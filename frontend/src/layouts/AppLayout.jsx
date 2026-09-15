@@ -243,7 +243,7 @@ export default function AppLayout() {
           />
         </div>
       ) : (
-        <div className="mt-auto rounded-lg bg-slate-50 p-2.5 text-xs dark:bg-slate-800/60">
+        <div className="mt-auto rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs dark:border-slate-800 dark:bg-slate-800/60">
           <p className="mb-1 font-medium text-slate-600 dark:text-slate-300">System</p>
           <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
             <span className={clsx('h-1.5 w-1.5 rounded-full', workerTone)} aria-hidden="true" />
@@ -277,9 +277,12 @@ export default function AppLayout() {
   )
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+    // No background of its own: `body` already paints the page ground from
+    // --surface-sunken, and a second opinion here is how the shell and the
+    // theme end up disagreeing about what colour the page is.
+    <div className="min-h-screen">
       {/* ------------------------------------------------------ top bar */}
-      <header className="sticky top-0 z-30 border-b border-slate-300/70 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95">
+      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/85 backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/90">
         <div className="flex h-14 items-center gap-3 px-3 sm:px-4">
           <button
             type="button"
@@ -354,10 +357,10 @@ export default function AppLayout() {
                     aria-hidden="true"
                   />
                   <div
-                    className="absolute right-0 z-20 mt-1 w-56 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800"
+                    className="absolute right-0 z-20 mt-1.5 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-pop dark:border-slate-700 dark:bg-slate-800"
                     role="menu"
                   >
-                    <div className="border-b border-slate-100 px-3 py-2 dark:border-slate-700">
+                    <div className="border-b border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800/60">
                       <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
                         {user?.full_name || user?.username}
                       </p>
@@ -393,7 +396,7 @@ export default function AppLayout() {
         {/* --------------------------------------------------- sidebar */}
         <aside
           className={clsx(
-            'sticky top-14 hidden h-[calc(100vh-3.5rem)] shrink-0 border-r border-slate-300/70 bg-white transition-[width] duration-150 lg:block dark:border-slate-800 dark:bg-slate-900',
+            'sticky top-14 hidden h-[calc(100vh-3.5rem)] shrink-0 overflow-y-auto border-r border-slate-200 bg-white transition-[width] duration-150 lg:block dark:border-slate-800 dark:bg-slate-900',
             railCollapsed ? 'w-16' : 'w-60',
           )}
         >
@@ -406,11 +409,11 @@ export default function AppLayout() {
         {mobileOpen ? (
           <div className="fixed inset-0 top-14 z-20 lg:hidden">
             <div
-              className="absolute inset-0 bg-slate-900/40"
+              className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]"
               onMouseDown={() => setMobileOpen(false)}
               aria-hidden="true"
             />
-            <aside className="relative h-full w-64 border-r border-slate-300/70 bg-white dark:border-slate-800 dark:bg-slate-900">
+            <aside className="relative h-full w-64 overflow-y-auto border-r border-slate-200 bg-white shadow-pop dark:border-slate-800 dark:bg-slate-900">
               {sidebar(false)}
             </aside>
           </div>

@@ -161,7 +161,7 @@ export function ActionMenu({
               }}
               className={clsx(
                 'z-50 overflow-hidden rounded-lg border border-slate-200 bg-white text-left',
-                'shadow-lg dark:border-slate-700 dark:bg-slate-800',
+                'shadow-pop dark:border-slate-700 dark:bg-slate-800',
               )}
             >
               {children({ close })}

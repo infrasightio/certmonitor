@@ -101,9 +101,16 @@ export function SeverityBadge({ severity }) {
 export function TagChip({ name, onRemove }) {
   const color = tagColor(name)
   return (
+    // `.chip` carries a brand-tinted ring, which would be indigo around a
+    // green tag, so both the fill and the ring are restated in the tag's own
+    // hue and the chip stays one colour. 1a and 33 are 10% and 20% alpha.
     <span
       className="chip"
-      style={{ backgroundColor: `${color}1a`, color }}
+      style={{
+        backgroundColor: `${color}1a`,
+        color,
+        '--tw-ring-color': `${color}33`,
+      }}
       title={name}
     >
       {name}
@@ -380,7 +387,7 @@ export function TagInput({ value = [], onChange, suggestions = [], placeholder =
             <button
               key={name}
               type="button"
-              className="chip hover:ring-1 hover:ring-brand-400"
+              className="chip transition-colors hover:bg-brand-100 hover:ring-brand-300"
               onClick={() => add(name)}
             >
               + {name}
@@ -436,7 +443,7 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-sm sm:items-center"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/45 p-4 backdrop-blur-sm sm:items-center"
       role="dialog"
       aria-modal="true"
       aria-label={title}
@@ -448,15 +455,15 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }) {
         ref={ref}
         tabIndex={-1}
         className={clsx(
-          'my-4 w-full rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900',
+          'my-4 w-full rounded-xl border border-slate-200 bg-white shadow-pop dark:border-slate-700 dark:bg-slate-900',
           widths[size],
         )}
       >
-        <header className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</h2>
+        <header className="card-header rounded-b-none">
+          <h2 className="card-title">{title}</h2>
           <button
             type="button"
-            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
+            className="-mr-1 rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-200/70 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-100"
             onClick={onClose}
             aria-label="Close dialog"
           >
@@ -465,7 +472,7 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }) {
         </header>
         <div className="max-h-[70vh] overflow-y-auto px-4 py-4">{children}</div>
         {footer ? (
-          <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 px-4 py-3 dark:border-slate-800">
+          <footer className="flex flex-wrap items-center justify-end gap-2 rounded-b-xl border-t border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
             {footer}
           </footer>
         ) : null}
@@ -520,7 +527,7 @@ export function Pagination({ meta, onPageChange, onPageSizeChange }) {
   const last = Math.min(page * page_size, total)
 
   return (
-    <div className="flex flex-col gap-2 border-t border-slate-200 px-3 py-2.5 text-sm dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-2 rounded-b-xl border-t border-slate-200 bg-slate-50 px-3 py-2.5 text-sm dark:border-slate-800 dark:bg-slate-900 sm:flex-row sm:items-center sm:justify-between">
       <p className="tnum text-slate-500 dark:text-slate-400">
         {total === 0 ? 'No results' : `${first}–${last} of ${total.toLocaleString()}`}
       </p>
