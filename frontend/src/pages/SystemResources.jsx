@@ -569,6 +569,7 @@ export default function SystemResources() {
               <Globe size={15} /> Vantage points
             </span>
           }
+          className="mb-4"
           bodyClassName="p-0"
         >
           <p className="border-b border-slate-100 px-4 py-2.5 text-xs text-slate-500 dark:border-navy-800 dark:text-slate-400">
