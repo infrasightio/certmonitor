@@ -553,6 +553,7 @@ async def test_channel(
     user: WriteNotifications,
     request: Request,
     session: DbSession,
+    config: RuntimeConfig,
 ) -> Message:
     channel = (
         await session.execute(
@@ -565,7 +566,9 @@ async def test_channel(
         )
 
     try:
-        await notification_service.send_test_notification(channel)
+        await notification_service.send_test_notification(
+            channel, base_url=config.get("public_base_url")
+        )
     except Exception as exc:
         channel.last_error = str(exc)[:1000]
         channel.failure_count += 1

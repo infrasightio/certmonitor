@@ -13,6 +13,7 @@ import json
 import time
 from dataclasses import dataclass
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -456,6 +457,19 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         max_value=3650,
     ),
     SettingSpec(
+        key="public_base_url",
+        value_type="string",
+        default="",
+        category="general",
+        label="Public URL of this deployment",
+        description=(
+            "Where operators reach InfraSight in a browser, for example "
+            "https://infrasight.example.com. Used to link a Slack alert back "
+            "to the endpoint it is about. Empty is fine - alerts then carry "
+            "no link, because a wrong link is worse than none."
+        ),
+    ),
+    SettingSpec(
         key="uptime_sla_target",
         value_type="float",
         default=99.9,
@@ -609,6 +623,20 @@ def validate_value(spec: SettingSpec, value: Any) -> Any:
             raise ValueError(f"{spec.key} must be at least {spec.min_value:g}")
         if spec.max_value is not None and coerced > spec.max_value:
             raise ValueError(f"{spec.key} must be at most {spec.max_value:g}")
+
+    if spec.key == "public_base_url":
+        # Empty is a valid answer. A non-empty one has to be a real absolute
+        # URL, because it is pasted straight into a Slack button and a
+        # half-typed host produces a link that silently goes nowhere.
+        cleaned = str(coerced).strip().rstrip("/")
+        if cleaned:
+            parsed = urlsplit(cleaned)
+            if parsed.scheme not in ("http", "https") or not parsed.netloc:
+                raise ValueError(
+                    "public_base_url must be an absolute http(s) URL, "
+                    "for example https://infrasight.example.com"
+                )
+        return cleaned
 
     if spec.key == "branding_app_name":
         # Collapse whitespace rather than reject it: an operator pasting a

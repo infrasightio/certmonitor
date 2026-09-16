@@ -571,7 +571,12 @@ return max(MIN_MONITOR_INTERVAL, interval)           # hard floor, default 30s`,
        'Method POST/PUT/PATCH. With a <code>secret</code>, the body is signed HMAC-SHA256 and sent ' +
        'as <code>X-InfraSight-Signature: sha256=...</code> and, for compatibility, ' +
        '<code>X-CertMonitor-Signature</code> with the same value.'],
-      ['<code>slack</code>', '<code>webhook_url</code>', 'Severity-coloured attachment with summary fields'],
+      ['<code>slack</code>', '<code>webhook_url</code>',
+       'Block Kit: a header naming the event, the endpoint linked to its monitored URL, a ' +
+       'two-column field grid, an optional <em>Open in InfraSight</em> button when ' +
+       '<code>public_base_url</code> is set, and a context line whose timestamp Slack renders in ' +
+       'each reader&rsquo;s own timezone. The severity colour bar comes from a single-attachment ' +
+       'wrapper.'],
       ['<code>teams</code>', '<code>webhook_url</code>', 'MessageCard with a severity theme colour'],
       ['<code>pagerduty</code>', '<code>routing_key</code>', 'Events v2 payload'],
       ['<code>email</code>', '<code>host</code>, <code>from_address</code>, <code>recipients</code>',

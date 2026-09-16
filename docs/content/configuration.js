@@ -415,6 +415,11 @@ DOCS.page({
       {
         label: 'General and features',
         html: DOCS.table(['Setting', 'Type', 'Default', 'Effect'], [
+          ['<code>public_base_url</code>', 'string', 'empty',
+           'Where operators reach InfraSight in a browser. When set, Slack alerts carry an ' +
+           '<em>Open in InfraSight</em> button linking to the endpoint; when empty they carry no ' +
+           'link, because a wrong link is worse than none. Must be an absolute http(s) URL &mdash; ' +
+           'a trailing slash is stripped and anything else is rejected.'],
           ['<code>uptime_sla_target</code>', 'float', '99.9',
            'The line the dashboard compares uptime against, and what <code>sla_breaches</code> is ' +
            'measured from'],

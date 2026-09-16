@@ -114,7 +114,7 @@ async def raise_alert(
 
     if dispatch and config.get("notifications_enabled", True):
         try:
-            await notification_service.dispatch_alert(session, alert)
+            await notification_service.dispatch_alert(session, alert, config=config)
         except Exception as exc:  # pragma: no cover - defensive
             alert.notification_status = "failed"
             alert.notification_error = str(exc)[:1000]

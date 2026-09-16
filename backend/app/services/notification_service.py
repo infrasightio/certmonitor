@@ -26,7 +26,13 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.enums import NotificationChannelType, SEVERITY_ORDER, Severity
+from app.core.enums import (
+    AlertType,
+    NotificationChannelType,
+    SEVERITY_ORDER,
+    Severity,
+    humanise_reason,
+)
 from app.core.logging import get_logger
 from app.core.security import decrypt_secret, encrypt_secret
 from app.models.alert import Alert, NotificationChannel
@@ -42,11 +48,23 @@ _SEVERITY_COLOURS = {
     Severity.CRITICAL.value: "#dc2626",
 }
 
-_SEVERITY_EMOJI = {
-    Severity.INFO.value: ":large_blue_circle:",
-    Severity.WARNING.value: ":large_yellow_circle:",
-    Severity.CRITICAL.value: ":red_circle:",
+# What the alert IS, in the words an operator would use, keyed by event rather
+# than by severity - "Still failing" and "Endpoint down" are both critical but
+# mean different things to whoever is reading at 2am. Unicode rather than
+# Slack shortcodes so the same string works in the header block, the plain
+# fallback and a push notification.
+_EVENT_PRESENTATION: dict[str, tuple[str, str]] = {
+    AlertType.ENDPOINT_DOWN.value: ("\U0001f534", "Endpoint down"),
+    AlertType.ENDPOINT_RECOVERED.value: ("✅", "Recovered"),
+    AlertType.HIGH_RESPONSE_TIME.value: ("\U0001f7e0", "Slow response"),
+    AlertType.REPEATED_FAILURES.value: ("\U0001f501", "Still failing"),
+    AlertType.SSL_EXPIRING.value: ("⏳", "Certificate expiring"),
+    AlertType.SSL_EXPIRED.value: ("\U0001f512", "Certificate expired"),
+    AlertType.SSL_INVALID.value: ("\U0001f512", "Certificate invalid"),
+    "test": ("\U0001f514", "Test notification"),
 }
+
+_DEFAULT_PRESENTATION = ("\U0001f4e1", "Alert")
 
 
 class NotificationError(RuntimeError):
@@ -164,9 +182,24 @@ def decrypt_config(blob: str | None) -> dict[str, Any] | None:
 
 
 # --------------------------------------------------------------- payloads
-def build_payload(alert: Alert) -> dict[str, Any]:
-    """Canonical JSON body used by the generic webhook channel."""
+def build_payload(alert: Alert, *, base_url: str | None = None) -> dict[str, Any]:
+    """Canonical JSON body used by the generic webhook channel.
+
+    ``base_url`` is the ``public_base_url`` setting. When it is set the payload
+    carries deep links back into the application, which is what turns a Slack
+    alert from a statement into somewhere to go. When it is not, ``links`` is
+    absent and every channel simply renders no link - a wrong link is worse
+    than none, so nothing is guessed from a Host header.
+    """
     endpoint = alert.endpoint
+    links: dict[str, str] = {}
+    if base_url:
+        base = base_url.rstrip("/")
+        links["app"] = base
+        if endpoint is not None:
+            links["endpoint"] = f"{base}/endpoints/{endpoint.id}"
+        if alert.incident_id:
+            links["incidents"] = f"{base}/incidents"
     return {
         "event": alert.alert_type,
         "severity": alert.severity,
@@ -191,11 +224,66 @@ def build_payload(alert: Alert) -> dict[str, Any]:
             else None
         ),
         "details": alert.details or {},
+        "links": links or None,
         "source": "infrasight",
     }
 
 
+def _format_latency(value: Any) -> str:
+    """Milliseconds, read the way an operator says them."""
+    try:
+        ms = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    return f"{ms:.0f} ms" if ms < 1000 else f"{ms / 1000:.2f} s"
+
+
+def _format_seconds(value: Any) -> str:
+    try:
+        total = int(float(value))
+    except (TypeError, ValueError):
+        return str(value)
+    if total < 60:
+        return f"{total}s"
+    minutes, seconds = divmod(total, 60)
+    if minutes < 60:
+        return f"{minutes}m {seconds}s" if seconds else f"{minutes}m"
+    hours, minutes = divmod(minutes, 60)
+    if hours < 24:
+        return f"{hours}h {minutes}m" if minutes else f"{hours}h"
+    days, hours = divmod(hours, 24)
+    return f"{days}d {hours}h" if hours else f"{days}d"
+
+
+def _format_date(value: Any) -> str:
+    """An ISO timestamp as a plain date. Anything else passes through."""
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).strftime(
+            "%d %b %Y"
+        )
+    except (TypeError, ValueError):
+        return str(value)
+
+
+# key -> (label, formatter). Ordered by how useful each one is when triaging,
+# because Slack shows at most ten fields and the first ones are what get read.
+_DETAIL_FIELDS: tuple[tuple[str, str, Any], ...] = (
+    ("failure_reason", "Reason", humanise_reason),
+    ("error", "Error", str),
+    ("http_status_code", "HTTP status", str),
+    ("response_time_ms", "Response time", _format_latency),
+    ("threshold_ms", "Threshold", _format_latency),
+    ("consecutive_failures", "Failed checks", str),
+    ("failed_checks", "Failed checks", str),
+    ("downtime_seconds", "Downtime", _format_seconds),
+    ("days_remaining", "Days remaining", str),
+    ("expires_at", "Expires", _format_date),
+    ("issuer", "Issuer", str),
+)
+
+
 def _summary_fields(payload: dict[str, Any]) -> list[tuple[str, str]]:
+    """Label/value pairs shared by every channel that renders a summary."""
     endpoint = payload.get("endpoint") or {}
     details = payload.get("details") or {}
     fields: list[tuple[str, str]] = []
@@ -203,18 +291,21 @@ def _summary_fields(payload: dict[str, Any]) -> list[tuple[str, str]]:
         fields.append(("Endpoint", f"{endpoint.get('name')} ({endpoint['url']})"))
     if endpoint.get("environment"):
         fields.append(("Environment", str(endpoint["environment"])))
-    for key, label in (
-        ("http_status_code", "HTTP status"),
-        ("response_time_ms", "Response time (ms)"),
-        ("failure_reason", "Failure reason"),
-        ("consecutive_failures", "Consecutive failures"),
-        ("days_remaining", "Days remaining"),
-        ("expires_at", "Expires"),
-        ("issuer", "Issuer"),
-        ("downtime_seconds", "Downtime (s)"),
-    ):
-        if details.get(key) is not None:
-            fields.append((label, str(details[key])))
+    message = payload.get("message") or ""
+    for key, label, render in _DETAIL_FIELDS:
+        value = details.get(key)
+        if value is None or value == "":
+            continue
+        rendered = render(value)
+        # Some alert types already spell the error out in their message -
+        # endpoint_down does, repeated_failures does not. Repeating it as a
+        # field would be noise in the first case and is the single most
+        # diagnostic line in the second.
+        if key == "error" and str(value) in message:
+            continue
+        fields.append((label, rendered[:300] if key == "error" else rendered))
+    if endpoint.get("team"):
+        fields.append(("Team", str(endpoint["team"])))
     if endpoint.get("owner"):
         fields.append(("Owner", str(endpoint["owner"])))
     return fields
@@ -253,27 +344,142 @@ async def _deliver_webhook(config: dict[str, Any], payload: dict[str, Any]) -> N
         )
 
 
-async def _deliver_slack(config: dict[str, Any], payload: dict[str, Any]) -> None:
-    emoji = _SEVERITY_EMOJI.get(payload["severity"], "")
-    lines = [f"{emoji} *{payload['title']}*"]
-    if payload.get("message"):
-        lines.append(payload["message"])
-    for label, value in _summary_fields(payload):
-        lines.append(f"• *{label}:* {value}")
+def _slack_escape(text: str) -> str:
+    """Slack's three reserved characters. Everything else is literal."""
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
-    body = {
-        "text": f"{payload['title']}",
-        "attachments": [
+
+def _slack_timestamp(iso: str) -> str:
+    """Render a timestamp in each reader's own timezone.
+
+    Slack resolves the ``<!date^…>`` token per viewer, so a team spread across
+    offsets stops doing arithmetic on a UTC string in the middle of an
+    incident. Falls back to the raw value if the timestamp will not parse.
+    """
+    try:
+        moment = datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return _slack_escape(str(iso))
+    epoch = int(moment.timestamp())
+    readable = moment.strftime("%d %b %Y at %H:%M UTC")
+    return f"<!date^{epoch}^{{date_short_pretty}} at {{time}}|{readable}>"
+
+
+def _slack_subject(payload: dict[str, Any]) -> str:
+    """The one line that says what this is about.
+
+    The endpoint name links to the monitored URL, so the thing under
+    discussion is one click away. The alert message usually opens with that
+    same URL, which would then read twice in a row - so a leading copy is
+    dropped and the remainder carries on from the linked name.
+    """
+    endpoint = payload.get("endpoint") or {}
+    message = (payload.get("message") or "").strip()
+    name = endpoint.get("name") or endpoint.get("hostname")
+    url = endpoint.get("url")
+
+    if not name:
+        return _slack_escape(message)
+
+    heading = (
+        f"*<{_slack_escape(url)}|{_slack_escape(name)}>*"
+        if url
+        else f"*{_slack_escape(name)}*"
+    )
+    if url and message.startswith(url):
+        message = message[len(url):].lstrip()
+    if not message:
+        return heading
+    # A section's text caps at 3000 characters; leave room for the heading.
+    return f"{heading}\n{_slack_escape(message)}"[:2900]
+
+
+def _slack_blocks(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    emoji, label = _EVENT_PRESENTATION.get(
+        payload.get("event", ""), _DEFAULT_PRESENTATION
+    )
+    endpoint = payload.get("endpoint") or {}
+
+    blocks: list[dict[str, Any]] = [
+        {
+            "type": "header",
+            # plain_text: no markdown, 150 characters, and the emoji carries
+            # the severity at a glance so the colour bar is not load-bearing
+            # for anyone who cannot rely on it.
+            "text": {"type": "plain_text", "text": f"{emoji} {label}"[:150], "emoji": True},
+        },
+        {"type": "section", "text": {"type": "mrkdwn", "text": _slack_subject(payload)}},
+    ]
+
+    # Two columns, and never the Endpoint row - the subject above already
+    # names it, linked. Ten is Slack's hard limit on a fields array.
+    fields = [
+        {"type": "mrkdwn", "text": f"*{name}*\n{_slack_escape(str(value))}"[:2000]}
+        for name, value in _summary_fields(payload)
+        if name != "Endpoint"
+    ][:10]
+    if fields:
+        blocks.append({"type": "section", "fields": fields})
+
+    # Straight to the endpoint when we know it, otherwise the application
+    # itself. Absent entirely when public_base_url is unset.
+    links = payload.get("links") or {}
+    target = links.get("endpoint") or links.get("app")
+    if target:
+        blocks.append(
             {
-                "color": _SEVERITY_COLOURS.get(payload["severity"], "#6b7280"),
-                "blocks": [
+                "type": "actions",
+                "elements": [
                     {
-                        "type": "section",
-                        "text": {"type": "mrkdwn", "text": "\n".join(lines)},
+                        "type": "button",
+                        "text": {
+                            "type": "plain_text",
+                            "text": "Open in InfraSight"
+                            if links.get("endpoint")
+                            else "Open InfraSight",
+                        },
+                        "url": target,
                     }
                 ],
             }
-        ],
+        )
+
+    context = ["InfraSight"]
+    if endpoint.get("environment"):
+        context.append(_slack_escape(str(endpoint["environment"])))
+    if payload.get("incident_id"):
+        context.append(f"Incident #{payload['incident_id']}")
+    stamp = _slack_timestamp(payload["occurred_at"]) if payload.get("occurred_at") else ""
+    if stamp:
+        context.append(stamp)
+    blocks.append(
+        {
+            "type": "context",
+            "elements": [{"type": "mrkdwn", "text": "  ·  ".join(context)}],
+        }
+    )
+    return blocks
+
+
+async def _deliver_slack(config: dict[str, Any], payload: dict[str, Any]) -> None:
+    emoji, label = _EVENT_PRESENTATION.get(
+        payload.get("event", ""), _DEFAULT_PRESENTATION
+    )
+    endpoint = payload.get("endpoint") or {}
+    subject = endpoint.get("name") or endpoint.get("hostname") or payload["title"]
+
+    # No top-level `text`. With `attachments` present Slack renders it as the
+    # message body AND the attachment below it, which is what made every alert
+    # print its own title twice. `fallback` covers the push notification and
+    # the sidebar preview without being rendered in the channel.
+    body = {
+        "attachments": [
+            {
+                "color": _SEVERITY_COLOURS.get(payload["severity"], "#6b7280"),
+                "fallback": f"{emoji} {label}: {subject}",
+                "blocks": _slack_blocks(payload),
+            }
+        ]
     }
     async with httpx.AsyncClient(timeout=DELIVERY_TIMEOUT_SECONDS, trust_env=False) as client:
         response = await client.post(config["webhook_url"], json=body)
@@ -458,7 +664,9 @@ async def deliver_to_channel(
     raise NotificationError(str(last_error) if last_error else "delivery failed")
 
 
-async def dispatch_alert(session: AsyncSession, alert: Alert) -> dict[str, Any]:
+async def dispatch_alert(
+    session: AsyncSession, alert: Alert, *, config: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """Send one alert to every channel that matches it.
 
     Updates the alert's notification bookkeeping. Returns a per-channel result
@@ -476,7 +684,7 @@ async def dispatch_alert(session: AsyncSession, alert: Alert) -> dict[str, Any]:
         alert.notification_status = "skipped"
         return {"delivered": 0, "failed": 0, "channels": []}
 
-    payload = build_payload(alert)
+    payload = build_payload(alert, base_url=(config or {}).get("public_base_url"))
     results: list[dict[str, Any]] = []
     delivered = failed = 0
 
@@ -519,18 +727,28 @@ async def dispatch_alert(session: AsyncSession, alert: Alert) -> dict[str, Any]:
     return {"delivered": delivered, "failed": failed, "channels": results}
 
 
-async def send_test_notification(channel: NotificationChannel) -> None:
-    """Deliver a synthetic payload so an operator can verify a channel."""
+async def send_test_notification(
+    channel: NotificationChannel, *, base_url: str | None = None
+) -> None:
+    """Deliver a synthetic payload so an operator can verify a channel.
+
+    Shaped like a real alert, including the link, so the test proves the
+    formatting and not merely that the webhook URL resolves.
+    """
     payload = {
         "event": "test",
         "severity": Severity.INFO.value,
         "title": f"InfraSight test notification ({channel.name})",
-        "message": "If you can read this, the channel is configured correctly.",
+        "message": (
+            f"Delivery to *{channel.name}* is working. Real alerts will look "
+            "like this."
+        ),
         "occurred_at": datetime.now(timezone.utc).isoformat(),
         "alert_id": 0,
         "incident_id": None,
         "endpoint": None,
         "details": {"channel_type": channel.channel_type},
+        "links": {"app": base_url.rstrip("/")} if base_url else None,
         "source": "infrasight",
     }
     config = decrypt_config(channel.config_encrypted)

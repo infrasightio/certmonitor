@@ -118,6 +118,35 @@ class FailureReason(StrEnum):
     UNKNOWN_ERROR = "unknown_error"
 
 
+# How a failure reason is written for a human. It lives here rather than in a
+# service because three different audiences read it - the incident list, the
+# endpoint detail view and every outbound notification - and "tls_error"
+# appearing raw in a Slack alert while the UI says "TLS error" is the kind of
+# inconsistency nobody ever gets round to fixing.
+FAILURE_REASON_LABELS: dict[str, str] = {
+    FailureReason.DNS_FAILURE.value: "DNS resolution failed",
+    FailureReason.CONNECTION_REFUSED.value: "Connection refused",
+    FailureReason.CONNECTION_TIMEOUT.value: "Connection timeout",
+    FailureReason.READ_TIMEOUT.value: "Read timeout",
+    FailureReason.TLS_ERROR.value: "TLS error",
+    FailureReason.CERT_EXPIRED.value: "Certificate expired",
+    FailureReason.CERT_INVALID.value: "Certificate invalid",
+    FailureReason.HTTP_STATUS_MISMATCH.value: "Unexpected HTTP status",
+    FailureReason.TOO_MANY_REDIRECTS.value: "Too many redirects",
+    FailureReason.SLOW_RESPONSE.value: "Slow response",
+    FailureReason.BLOCKED_TARGET.value: "Target not permitted",
+    FailureReason.CONFIG_ERROR.value: "Configuration error",
+    FailureReason.UNKNOWN_ERROR.value: "Unknown error",
+}
+
+
+def humanise_reason(reason: str | None) -> str:
+    """Write a failure reason the way a person would say it."""
+    if not reason or reason == FailureReason.NONE.value:
+        return "Unknown"
+    return FAILURE_REASON_LABELS.get(reason, reason.replace("_", " ").capitalize())
+
+
 class SslStatus(StrEnum):
     VALID = "valid"
     EXPIRING_SOON = "expiring_soon"

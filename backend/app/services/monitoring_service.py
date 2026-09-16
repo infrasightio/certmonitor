@@ -35,6 +35,7 @@ from app.core.enums import (
     IncidentStatus,
     Severity,
     SslStatus,
+    humanise_reason,
 )
 from app.core.logging import get_logger
 from app.core.security import decrypt_secret
@@ -53,27 +54,10 @@ from app.services import alert_service
 
 logger = get_logger(__name__)
 
-_HUMAN_REASONS = {
-    FailureReason.DNS_FAILURE.value: "DNS resolution failed",
-    FailureReason.CONNECTION_REFUSED.value: "Connection refused",
-    FailureReason.CONNECTION_TIMEOUT.value: "Connection timeout",
-    FailureReason.READ_TIMEOUT.value: "Read timeout",
-    FailureReason.TLS_ERROR.value: "TLS error",
-    FailureReason.CERT_EXPIRED.value: "Certificate expired",
-    FailureReason.CERT_INVALID.value: "Certificate invalid",
-    FailureReason.HTTP_STATUS_MISMATCH.value: "Unexpected HTTP status",
-    FailureReason.TOO_MANY_REDIRECTS.value: "Too many redirects",
-    FailureReason.SLOW_RESPONSE.value: "Slow response",
-    FailureReason.BLOCKED_TARGET.value: "Target not permitted",
-    FailureReason.CONFIG_ERROR.value: "Configuration error",
-    FailureReason.UNKNOWN_ERROR.value: "Unknown error",
-}
-
-
-def humanise_reason(reason: str | None) -> str:
-    if not reason or reason == FailureReason.NONE.value:
-        return "Unknown"
-    return _HUMAN_REASONS.get(reason, reason.replace("_", " ").capitalize())
+# Re-exported: the label map moved to app.core.enums so notifications and the
+# API render a failure reason identically. Call sites here and in the routes
+# keep using ``monitoring_service.humanise_reason``.
+__all__ = ["humanise_reason"]
 
 
 @dataclass
