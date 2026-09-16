@@ -102,9 +102,9 @@ DOCS.page({
                              v
             +----------------------------------+
             |  frontend  (nginx + built SPA)   |
-            |  serves /  ; proxies /api,       |
-            |  /health, /ready, /live,         |
-            |  /branding                       |
+            |  serves /  and /docs (this site) |
+            |  proxies /api, /health, /ready,  |
+            |  /live, /branding                |
             +----------------+-----------------+
                              | http://backend:8000
                              v

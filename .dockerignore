@@ -11,9 +11,12 @@
 *.pem
 *.key
 
-# Documentation and meta
+# Documentation and meta.
+#
+# docs/ is NOT excluded: the frontend image serves it at /docs, so the
+# documentation ships with the application and is readable on an air-gapped
+# host. Its own README is excluded along with every other one.
 README.md
-docs/
 *.md
 !backend/README.md
 

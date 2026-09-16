@@ -174,7 +174,24 @@ pytest -k "incident"`, 'shell'),
     `<h2>These documents</h2>
     <p>The site is deliberately build-free: plain HTML, one stylesheet and plain scripts. It opens
     from a <code>file://</code> path, from <code>python -m http.server</code>, or from any static
-    host, with no toolchain and no dependencies to keep current.</p>`,
+    host, with no toolchain and no dependencies to keep current.</p>
+
+    <p>It is also shipped <strong>inside the application</strong>. The frontend image copies
+    <code>docs/</code> into nginx's web root, so a running InfraSight serves it at
+    <code>/docs</code> on its own origin, and the sidebar carries a <strong>Documentation</strong>
+    link to it. Three consequences follow from that, and they are the constraints to respect when
+    editing:</p>
+
+    <ul>
+      <li><strong>No external requests.</strong> The frontend enforces
+      <code>default-src 'self'</code>, and these hosts are frequently air-gapped. No webfont, no
+      CDN, no analytics &mdash; the type roles come from faces already on the reader's machine.</li>
+      <li><strong>No inline scripts.</strong> <code>script-src 'self'</code> has no
+      <code>'unsafe-inline'</code>. Everything executable is a file.</li>
+      <li><strong>The build context is the repository root.</strong> Compose builds the frontend
+      with <code>context: .</code> so <code>docs/</code> is reachable, and
+      <code>.dockerignore</code> deliberately does not exclude it.</li>
+    </ul>`,
 
     DOCS.diagram(`
 docs/
@@ -193,12 +210,20 @@ docs/
     <page>.js                one file per page, calling DOCS.page({...})
 `, 'Adding a page means: write content/<id>.js, add a <script> tag to index.html, and list the id in content/nav.js. Nothing else.'),
 
-    DOCS.code(`# Serve it locally
-cd docs
-python -m http.server 4173      # then open http://localhost:4173
+    DOCS.code(`# From a running stack - what an operator sees
+http://localhost:8080/docs/
 
-# or just open docs/index.html directly - hash routing means
-# it works from the filesystem too`, 'shell'),
+# From the frontend dev server; vite.config.js serves ../docs at /docs
+cd frontend && npm run dev       # http://localhost:5173/docs/
+
+# Standalone, no server at all - hash routing works from the filesystem
+open docs/index.html`, 'shell'),
+
+    DOCS.callout('note', 'The dev server serves the docs too',
+      '<p>A small <code>configureServer</code> plugin in <code>frontend/vite.config.js</code> maps ' +
+      '<code>/docs</code> onto <code>../docs</code>, so the Documentation link behaves the same ' +
+      'under <code>npm run dev</code> as it does behind nginx. It is marked ' +
+      '<code>apply: \'serve\'</code>, so none of it reaches the production build.</p>'),
 
     `<h3>Writing a page</h3>`,
 
@@ -227,6 +252,18 @@ python -m http.server 4173      # then open http://localhost:4173
       '<code>{</code> is interpolation. Escape it as <code>\\${</code> when you quote a shell or ' +
       'Compose snippet that uses one. <code>$VAR</code> and <code>$(...)</code> are fine as they ' +
       'are.</p>'),
+
+    `<h3>Adding a page, in full</h3>
+    <p>Three steps, and a fourth that is easy to forget:</p>
+    <ol>
+      <li>Write <code>content/&lt;id&gt;.js</code> calling <code>DOCS.page({...})</code>.</li>
+      <li>Add a <code>&lt;script src="content/&lt;id&gt;.js"&gt;</code> tag to
+      <code>index.html</code>.</li>
+      <li>List the id under a group in <code>content/nav.js</code>. That one file drives the
+      sidebar, the previous/next order and the breadcrumb group.</li>
+      <li>Nothing for the container: <code>COPY docs</code> takes the whole directory, so a new file
+      ships on the next image build with no Dockerfile change.</li>
+    </ol>`,
 
     `<h2>Keeping the docs true</h2>
     <p>This site describes an implementation, so it goes stale the way code comments do. The places

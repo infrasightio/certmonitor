@@ -6,12 +6,10 @@
 <title>InfraSight Engineering Docs</title>
 <meta name="description" content="How InfraSight is built, how it monitors, how it stores data, and how to run it.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#128225;</text></svg>">
-<!-- IBM Plex: sans for chrome and data, serif for prose, mono for code. Every
-     rule declares a real fallback stack, so an air-gapped or offline open
-     degrades to the system faces rather than silently to something else. -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:ital,wght@0,400;0,600;1,400&display=swap">
+<!-- No webfont, and no external request of any kind: this site is also served
+     from inside InfraSight at /docs, under a default-src 'self' policy, on
+     hosts that are frequently air-gapped. Type roles come from faces already
+     on the machine - see assets/styles.css. -->
 <link rel="stylesheet" href="assets/styles.css">
 </head>
 <body>

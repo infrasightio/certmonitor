@@ -9,9 +9,16 @@
  *
  * Type is where the docs deliberately differ from the app. The product is a UI
  * - scanned and operated, set in a sans. This is reference material that is
- * read, so prose is set in a serif, chrome and data in the matching sans, and
- * code in the matching mono. One superfamily, three roles, each doing a
- * different job.
+ * read, so prose is set in a serif, chrome and data in a sans, and code in a
+ * mono. Three roles, each doing a different job.
+ *
+ * Those faces are the ones already on the reader's machine. No webfont is
+ * loaded, and that is a decision rather than a shortcut: this site is served
+ * from inside InfraSight itself, whose whole premise is that nothing about the
+ * monitored fleet leaves the host. Documentation that phoned a font CDN on
+ * every page load would contradict that, would be blocked by the frontend's
+ * own `default-src 'self'` policy, and would break outright on the air-gapped
+ * installs this product is built for.
  *
  * Structure: the bare :root carries the complete light palette. The dark
  * blocks redefine tokens only, never component rules, so the un-stamped
@@ -64,9 +71,14 @@
   --topbar-h: 58px;
   --radius: 6px;
 
-  --sans:  "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-  --serif: "IBM Plex Serif", Georgia, "Times New Roman", serif;
-  --mono:  "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  /* Three roles from faces that are already installed. `ui-serif` picks up
+     New York on Apple platforms and Georgia elsewhere - a screen serif in
+     both cases, never a print face scaled down. */
+  --sans:  system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+           "Helvetica Neue", Arial, sans-serif;
+  --serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+  --mono:  ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+           "Liberation Mono", "Courier New", monospace;
 }
 
 /* Dark is a blue room, not a void - navy surfaces, slate ink, exactly as the

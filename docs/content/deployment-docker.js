@@ -173,20 +173,37 @@ DOCS.page({
 
     `<h2>The frontend image</h2>`,
 
+    DOCS.callout('warn', 'The build context is the repository root',
+      '<p>Not <code>./frontend</code>, because this image also serves the documentation site. ' +
+      'Compose declares <code>context: .</code> with <code>dockerfile: frontend/Dockerfile</code>, ' +
+      'and every <code>COPY</code> path in that Dockerfile is therefore root-relative. ' +
+      '<code>.dockerignore</code> excludes <code>*.md</code> but deliberately does <em>not</em> ' +
+      'exclude <code>docs/</code>.</p>'),
+
     DOCS.diagram(`
   builder stage   node:20-alpine
-     COPY package.json package-lock.json*      (manifests first, so npm ci
-     npm ci  (or npm install without a lockfile) is cached until deps change)
-     COPY . .
+     COPY frontend/package.json frontend/package-lock.json*
+     npm ci  (or npm install without a lockfile)   (manifests first, so this
+     COPY frontend/ .                               is cached until deps change)
      npm run build           ->  /app/dist, content-hashed filenames
 
   runtime stage   nginx:1.27-alpine
      apk add curl
-     COPY --from=builder /app/dist  ->  /usr/share/nginx/html
-     COPY nginx.conf                ->  /etc/nginx/conf.d/default.conf
+     COPY --from=builder /app/dist   ->  /usr/share/nginx/html
+     COPY docs                       ->  /usr/share/nginx/html/docs
+     COPY frontend/nginx.conf        ->  /etc/nginx/conf.d/default.conf
+     COPY frontend/security-headers.conf
+                                     ->  /etc/nginx/snippets/security-headers.conf
      EXPOSE 80
      HEALTHCHECK curl -fsS http://127.0.0.1/healthz
 `, 'The nginx master runs as root to bind :80 and write its pid, with workers as the nginx user - the stock image default, and the least surprising choice.'),
+
+    DOCS.callout('note', 'Why the snippet is not in conf.d',
+      '<p>The base image already does <code>include /etc/nginx/conf.d/*.conf;</code> inside its ' +
+      '<code>http</code> block. A security-headers snippet placed there would be loaded twice: ' +
+      'once globally by that wildcard and once by each explicit <code>include</code>. ' +
+      '<code>/etc/nginx/snippets/</code> is outside the wildcard, so it is pulled in only where it ' +
+      'is asked for.</p>'),
 
     `<h3>What nginx does</h3>`,
 
@@ -205,11 +222,27 @@ DOCS.page({
       ['<code>/assets/</code>',
        '<code>expires 1y</code>, <code>Cache-Control: public, immutable</code> &mdash; Vite emits ' +
        'content-hashed filenames, so these can be cached hard'],
+      ['<code>/docs/</code>',
+       'The documentation site, from <code>/usr/share/nginx/html/docs</code>. Falls back to ' +
+       '<code>/docs/index.html</code> so hash routes resolve, and sets ' +
+       '<code>Cache-Control: no-cache</code> &mdash; its filenames are not content-hashed, so a ' +
+       'stale <code>app.js</code> beside a fresh <code>index.html</code> would be a real bug. ' +
+       '<code>/docs</code> without the slash 301s to <code>/docs/</code>.'],
       ['<code>/</code>',
        'SPA fallback to <code>index.html</code>, with <code>Cache-Control: no-store, ' +
        'must-revalidate</code> &mdash; caching it would leave clients on the old asset manifest ' +
        'after a deploy']
     ]),
+
+    DOCS.callout('danger', 'add_header does not merge - it replaces',
+      '<p>An nginx <code>location</code> that sets <em>any</em> <code>add_header</code> stops ' +
+      'inheriting <em>every</em> <code>add_header</code> from its parent. Three locations here set ' +
+      'a <code>Cache-Control</code>, so all three must re-include the security headers or they ' +
+      'would serve their content with no CSP and no <code>nosniff</code> &mdash; including ' +
+      '<code>location /</code>, which serves the application shell itself.</p>' +
+      '<p>That is why the headers live in <code>frontend/security-headers.conf</code> and are ' +
+      '<code>include</code>d rather than written out four times: four copies of a CSP is four ' +
+      'chances for them to drift apart.</p>'),
 
     `<p>It also sets <code>client_max_body_size 12m</code> (above <code>MAX_UPLOAD_BYTES</code>, so
     the API produces the size error rather than the proxy), turns

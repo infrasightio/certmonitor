@@ -304,8 +304,13 @@ DOCS.page({
   GET /health|/ready|/live  -> proxied, access_log off, read timeout 10s
   GET /branding[/logo]      -> proxied; unauthenticated, read before sign-in
 
+  GET /docs/...             -> the documentation site, copied into the image
+                               try_files ... /docs/index.html (hash routing)
+                               Cache-Control: no-cache
+  GET /docs                 -> 301 /docs/
+
   GET /healthz              -> nginx answers "ok" itself, no upstream
-`, 'One origin for everything, which removes CORS from the picture and matches how the app is expected to sit behind an ingress.')
+`, 'One origin for everything - the app, the API, the probes and the documentation - which removes CORS from the picture and matches how the app is expected to sit behind an ingress.')
 
   ].join('\n')
 });

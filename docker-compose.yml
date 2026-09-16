@@ -240,8 +240,11 @@ services:
   # ------------------------------------------------------------ frontend
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      # The repository root, not ./frontend: this image also serves the
+      # documentation site from docs/ at /docs, so the build context has to
+      # span both. See frontend/Dockerfile.
+      context: .
+      dockerfile: frontend/Dockerfile
     image: infrasight/frontend:${IMAGE_TAG:-latest}
     container_name: infrasight-frontend
     restart: unless-stopped

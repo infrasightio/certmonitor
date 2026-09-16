@@ -3,8 +3,10 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
   Activity,
   Bell,
+  BookOpen,
   ChevronDown,
   ClipboardList,
+  ExternalLink,
   FileSearch,
   FileClock,
   Gauge,
@@ -66,6 +68,17 @@ const NAV = [
   },
   { to: '/settings', label: 'Settings', icon: Settings, permission: 'settings:read' },
 ]
+
+/**
+ * The bundled documentation site.
+ *
+ * Deliberately NOT a route in this application. It is a separate static site
+ * under docs/, copied into the frontend image and served by the same nginx at
+ * the same origin, so the link needs no configuration and works on an
+ * air-gapped host. Because it is outside the router it is reached with a plain
+ * anchor rather than a NavLink.
+ */
+const DOCS_URL = '/docs/'
 
 const THEME_KEY = 'infrasight.theme'
 const RAIL_KEY = 'infrasight.nav_collapsed'
@@ -222,10 +235,34 @@ export default function AppLayout() {
         </NavLink>
       ))}
 
+      {/* Documentation. Every role gets it - what the product does is not
+          privileged information, and the person most likely to need the
+          troubleshooting page is the one with the fewest permissions.
+          Opens in a new tab so an operator keeps their place in the app. */}
+      <a
+        href={DOCS_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        title={collapsed ? 'Documentation' : undefined}
+        aria-label={collapsed ? 'Documentation' : undefined}
+        className={clsx(
+          'nav-link mt-auto',
+          collapsed && 'w-10 justify-center px-0',
+        )}
+      >
+        <BookOpen size={17} aria-hidden="true" className="shrink-0" />
+        {!collapsed ? (
+          <>
+            <span className="flex-1 truncate">Documentation</span>
+            <ExternalLink size={13} aria-hidden="true" className="shrink-0 opacity-50" />
+          </>
+        ) : null}
+      </a>
+
       {collapsed ? (
         // Two dots carrying the same two facts as the panel below. Colour
         // alone would fail here, so each keeps a title with the written state.
-        <div className="mt-auto flex flex-col items-center gap-2 pb-1">
+        <div className="flex flex-col items-center gap-2 pb-1 pt-1">
           <span
             className={clsx('h-2 w-2 rounded-full', workerTone)}
             title={`Worker: ${workerState || 'unknown'}`}
@@ -243,7 +280,7 @@ export default function AppLayout() {
           />
         </div>
       ) : (
-        <div className="mt-auto rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs dark:border-navy-800 dark:bg-navy-800/60">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs dark:border-navy-800 dark:bg-navy-800/60">
           <p className="mb-1 font-medium text-slate-600 dark:text-slate-300">System</p>
           <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
             <span className={clsx('h-1.5 w-1.5 rounded-full', workerTone)} aria-hidden="true" />
