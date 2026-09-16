@@ -180,7 +180,18 @@ DOCS.page({
     ]),
 
     `<p><code>POST /api/notification-channels/{id}/test</code> delivers a synthetic payload so a
-    channel can be verified without waiting for a real outage.</p>`,
+    channel can be verified without waiting for a real outage.</p>
+
+    <h3>Delivery counters</h3>
+    <p>Each channel accumulates <code>success_count</code>, <code>failure_count</code> and
+    <code>last_error</code>. They are lifetime totals, not a rate, so a channel that was
+    misconfigured for an afternoon carries those failures forever.</p>
+
+    <p><strong>Replacing a channel&rsquo;s configuration resets all three.</strong> The counters
+    describe the configuration that was just replaced &mdash; a channel that failed thirteen times
+    against a mistyped SMTP port should not keep reading as unhealthy once the port is corrected.
+    Updating only the filters (severity, events, environments, tags) leaves the counters alone,
+    because the delivery target has not changed.</p>`,
 
     DOCS.callout('note', 'Delivery is retried, but never at the cost of the check',
       '<p>Each channel gets up to three attempts with exponential backoff (2s, then 4s, capped at ' +

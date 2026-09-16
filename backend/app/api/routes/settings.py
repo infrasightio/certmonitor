@@ -528,6 +528,14 @@ async def update_channel(
         channel.config_public = notification_service.public_view(
             channel.channel_type, config
         )
+        # The counters and the last error describe the configuration that has
+        # just been replaced, not the one now in place. A channel that failed
+        # thirteen times against a mistyped port should not keep reading as
+        # unhealthy once the port is corrected - there is otherwise no way to
+        # clear them short of editing the database by hand.
+        channel.success_count = 0
+        channel.failure_count = 0
+        channel.last_error = None
 
     await audit_service.record(
         session,
