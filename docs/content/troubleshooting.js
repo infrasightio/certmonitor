@@ -355,6 +355,20 @@ docker compose logs postgres | grep 'duration:'`, 'shell') +
 
     `<h2>Docker</h2>`,
 
+    DOCS.details('service "api" is not running',
+      `<p>There is no <code>api</code> service. The container is called
+      <strong><code>backend</code></strong>; <code>api</code> is the entrypoint <em>role</em> it runs
+      with (<code>command: ["api"]</code>), and the two names sit close enough together in
+      <code>docker-compose.yml</code> to be easy to conflate.</p>` +
+      DOCS.code(`docker compose exec api alembic upgrade head       # fails
+docker compose exec backend alembic upgrade head   # works`, 'shell') +
+      DOCS.callout('tip', 'You almost certainly do not need to run this',
+        '<p>The <code>api</code> role already runs <code>alembic upgrade head</code> and then ' +
+        '<code>python -m app.bootstrap</code> on every start, before uvicorn. A plain ' +
+        '<code>docker compose up -d --build</code> has therefore already migrated and seeded. ' +
+        'To apply migrations as a deliberate separate step, use ' +
+        '<code>docker compose run --rm backend migrate</code>.</p>')),
+
     DOCS.details('A container restarts repeatedly',
       DOCS.code(`docker compose ps                        # look at the STATUS column
 docker compose logs --tail=200 <service>
