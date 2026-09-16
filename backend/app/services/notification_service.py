@@ -387,7 +387,13 @@ def _slack_subject(payload: dict[str, Any]) -> str:
         else f"*{_slack_escape(name)}*"
     )
     if url and message.startswith(url):
+        # "https://host/ has now failed 12 checks" -> "Has now failed 12
+        # checks", so the remainder reads as a sentence under the linked name
+        # rather than as a fragment. Only the first character is touched;
+        # `capitalize()` would lowercase the rest and wreck "TLS" and "DNS".
         message = message[len(url):].lstrip()
+        if message:
+            message = message[0].upper() + message[1:]
     if not message:
         return heading
     # A section's text caps at 3000 characters; leave room for the heading.
