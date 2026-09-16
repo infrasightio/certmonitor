@@ -19,6 +19,7 @@ import json
 import smtplib
 from datetime import datetime, timezone
 from email.message import EmailMessage
+from html import escape as _html_escape
 from typing import Any, Callable, Coroutine
 from urllib.parse import urlsplit
 
@@ -263,6 +264,19 @@ def _format_date(value: Any) -> str:
         )
     except (TypeError, ValueError):
         return str(value)
+
+
+def _format_moment(value: Any) -> str:
+    """A timestamp a person can read, in UTC.
+
+    E-mail has no equivalent of Slack's per-viewer date token, so the zone is
+    stated rather than implied - an unlabelled time in an alert is a trap.
+    """
+    try:
+        moment = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return str(value)
+    return moment.astimezone(timezone.utc).strftime("%d %b %Y at %H:%M UTC")
 
 
 # key -> (label, formatter). Ordered by how useful each one is when triaging,
@@ -557,19 +571,193 @@ async def _deliver_pagerduty(config: dict[str, Any], payload: dict[str, Any]) ->
         )
 
 
+def _email_text(payload: dict[str, Any]) -> str:
+    """The plain-text part.
+
+    Not a formality. It is what a terminal mail client, a pager gateway and an
+    SMS bridge actually show, so it carries the same facts as the HTML rather
+    than a stub telling the reader to view the message elsewhere.
+    """
+    endpoint = payload.get("endpoint") or {}
+    _emoji, label = _EVENT_PRESENTATION.get(
+        payload.get("event", ""), _DEFAULT_PRESENTATION
+    )
+    subject = endpoint.get("name") or endpoint.get("hostname")
+
+    lines = [f"{label.upper()}{f': {subject}' if subject else ''}", ""]
+    if payload.get("message"):
+        lines.extend([payload["message"], ""])
+    for name, value in _summary_fields(payload):
+        lines.append(f"  {name + ':':<18} {value}")
+
+    links = payload.get("links") or {}
+    target = links.get("endpoint") or links.get("app")
+    if target:
+        lines.extend(["", f"Open in InfraSight: {target}"])
+    lines.extend(
+        ["", f"Occurred at {_format_moment(payload.get('occurred_at'))}", "", "-- InfraSight"]
+    )
+    return "\n".join(lines)
+
+
+def _email_html(payload: dict[str, Any]) -> str:
+    """The HTML part.
+
+    Built the way transactional mail has to be built rather than the way a web
+    page would be: one centred table, every style inline, no external asset of
+    any kind. Mail clients strip stylesheets, ignore flex and grid, and block
+    remote images by default - and this product is deployed on hosts with no
+    internet, so a remote logo would be a broken icon rather than branding.
+    """
+    endpoint = payload.get("endpoint") or {}
+    emoji, label = _EVENT_PRESENTATION.get(
+        payload.get("event", ""), _DEFAULT_PRESENTATION
+    )
+    accent = _SEVERITY_COLOURS.get(payload["severity"], "#5e6880")
+
+    name = endpoint.get("name") or endpoint.get("hostname") or ""
+    url = endpoint.get("url")
+    heading = _html_escape(name) if name else _html_escape(payload.get("title", ""))
+    if name and url:
+        heading = (
+            f'<a href="{_html_escape(url, quote=True)}" '
+            f'style="color:#1c2129;text-decoration:none;">{_html_escape(name)}</a>'
+        )
+
+    message = (payload.get("message") or "").strip()
+    if url and message.startswith(url):
+        message = message[len(url):].lstrip()
+        if message:
+            message = message[0].upper() + message[1:]
+
+    rows = "".join(
+        f'<tr>'
+        f'<td style="padding:7px 16px 7px 0;color:#5e6880;font-size:13px;'
+        f'white-space:nowrap;vertical-align:top;">{_html_escape(field)}</td>'
+        f'<td style="padding:7px 0;color:#1c2129;font-size:13px;'
+        f'vertical-align:top;">{_html_escape(str(value))}</td>'
+        f'</tr>'
+        for field, value in _summary_fields(payload)
+        if field != "Endpoint"
+    )
+
+    # Every optional section is resolved to a string here rather than inline in
+    # the template below. Conditionals nested inside a triple-quoted f-string
+    # are a good way to ship broken markup that no test would catch.
+    message_row = ""
+    if message:
+        message_row = (
+            '<tr><td style="padding:14px 28px 0 28px;font-size:15px;'
+            f'line-height:1.6;color:#3b4351;">{_html_escape(message)}</td></tr>'
+        )
+
+    fields_row = ""
+    if rows:
+        fields_row = (
+            '<tr><td style="padding:22px 28px 0 28px;">'
+            '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+            'border="0" style="background:#f9fafc;border:1px solid #d6dbe5;'
+            f'border-radius:8px;padding:6px 16px;">{rows}</table>'
+            '</td></tr>'
+        )
+
+    links = payload.get("links") or {}
+    target = links.get("endpoint") or links.get("app")
+    button = ""
+    if target:
+        button = (
+            '<tr><td style="padding:24px 28px 0 28px;">'
+            f'<a href="{_html_escape(target, quote=True)}" '
+            'style="display:inline-block;background:#3e4cc6;color:#ffffff;'
+            'font-size:14px;font-weight:600;text-decoration:none;'
+            'padding:11px 20px;border-radius:6px;">Open in InfraSight</a>'
+            '</td></tr>'
+        )
+
+    footer_parts = ["InfraSight"]
+    if endpoint.get("environment"):
+        footer_parts.append(_html_escape(str(endpoint["environment"])))
+    if payload.get("incident_id"):
+        footer_parts.append(f"Incident #{payload['incident_id']}")
+    footer_parts.append(_html_escape(_format_moment(payload.get("occurred_at"))))
+
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Transactional mail is pinned to light. A client that inverts a coloured
+     severity band produces something that reads as a different severity. -->
+<meta name="color-scheme" content="light">
+<meta name="supported-color-schemes" content="light">
+<title>{_html_escape(payload.get("title", "InfraSight alert"))}</title>
+</head>
+<body style="margin:0;padding:0;background:#f2f4f8;">
+<!-- Preheader: the grey line an inbox shows beside the subject. Hidden in the
+     body itself, so it is not said twice. -->
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">
+{_html_escape(message or payload.get("title", ""))}
+</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="background:#f2f4f8;padding:24px 12px;">
+<tr><td align="center">
+  <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"
+         style="max-width:600px;width:100%;background:#ffffff;border:1px solid #d6dbe5;
+                border-radius:10px;overflow:hidden;
+                font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+
+    <tr><td style="background:{accent};height:4px;line-height:4px;font-size:0;">&nbsp;</td></tr>
+
+    <tr><td style="padding:26px 28px 0 28px;">
+      <div style="font-size:12px;font-weight:700;letter-spacing:.08em;
+                  text-transform:uppercase;color:{accent};">
+        {emoji}&nbsp;{_html_escape(label)}
+      </div>
+      <div style="margin-top:6px;font-size:21px;font-weight:600;color:#1c2129;
+                  line-height:1.3;word-break:break-word;">{heading}</div>
+    </td></tr>
+
+    {message_row}
+    {fields_row}
+    {button}
+
+    <tr><td style="padding:24px 28px 26px 28px;">
+      <div style="border-top:1px solid #d6dbe5;padding-top:14px;
+                  font-size:12px;color:#78829a;">
+        {' &middot; '.join(footer_parts)}
+      </div>
+    </td></tr>
+
+  </table>
+</td></tr>
+</table>
+</body>
+</html>"""
+
+
 def _send_email_blocking(config: dict[str, Any], payload: dict[str, Any]) -> None:
     message = EmailMessage()
     message["Subject"] = f"[{payload['severity'].upper()}] {payload['title']}"
     message["From"] = config["from_address"]
     message["To"] = ", ".join(config["recipients"])
 
-    lines = [payload["title"], ""]
-    if payload.get("message"):
-        lines.extend([payload["message"], ""])
-    for label, value in _summary_fields(payload):
-        lines.append(f"{label}: {value}")
-    lines.extend(["", f"Occurred at: {payload['occurred_at']}", "", "-- InfraSight"])
-    message.set_content("\n".join(lines))
+    # Filterable without reading the body - a mail rule can route on these
+    # rather than pattern-matching a subject line that may be reworded.
+    message["X-InfraSight-Event"] = str(payload.get("event", ""))
+    message["X-InfraSight-Severity"] = str(payload.get("severity", ""))
+
+    # Thread every alert about one incident together. "Endpoint DOWN" and the
+    # "Recovered" that follows it belong in one conversation, not as two
+    # unrelated messages twenty minutes apart.
+    if payload.get("incident_id"):
+        thread_id = f"<infrasight-incident-{payload['incident_id']}@infrasight.local>"
+        message["References"] = thread_id
+        message["In-Reply-To"] = thread_id
+
+    # Order matters: set_content makes text/plain the body, add_alternative
+    # promotes the message to multipart/alternative with HTML preferred.
+    message.set_content(_email_text(payload))
+    message.add_alternative(_email_html(payload), subtype="html")
 
     host = config["host"]
     port = int(config.get("port") or 587)

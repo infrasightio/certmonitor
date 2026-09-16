@@ -580,7 +580,13 @@ return max(MIN_MONITOR_INTERVAL, interval)           # hard floor, default 30s`,
       ['<code>teams</code>', '<code>webhook_url</code>', 'MessageCard with a severity theme colour'],
       ['<code>pagerduty</code>', '<code>routing_key</code>', 'Events v2 payload'],
       ['<code>email</code>', '<code>host</code>, <code>from_address</code>, <code>recipients</code>',
-       'Port defaults to 587, <code>use_tls</code> true. SMTP send runs off the event loop.']
+       'Port defaults to 587, <code>use_tls</code> true. Sent as ' +
+       '<code>multipart/alternative</code>: an HTML part built as a single inline-styled table ' +
+       'with no external asset of any kind, and a plain-text part carrying the same facts for ' +
+       'terminal clients and pager gateways. Alerts sharing an <code>incident_id</code> are ' +
+       'threaded through <code>References</code>, and <code>X-InfraSight-Event</code> / ' +
+       '<code>X-InfraSight-Severity</code> headers make mail rules possible without matching on ' +
+       'the subject. The SMTP send runs off the event loop.']
     ]),
 
     DOCS.callout('tip', 'Secrets in channel configuration',
