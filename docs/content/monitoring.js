@@ -577,8 +577,14 @@ return max(MIN_MONITOR_INTERVAL, interval)           # hard floor, default 30s`,
        '<code>public_base_url</code> is set, and a context line whose timestamp Slack renders in ' +
        'each reader&rsquo;s own timezone. The severity colour bar comes from a single-attachment ' +
        'wrapper.'],
-      ['<code>teams</code>', '<code>webhook_url</code>', 'MessageCard with a severity theme colour'],
-      ['<code>pagerduty</code>', '<code>routing_key</code>', 'Events v2 payload'],
+      ['<code>teams</code>', '<code>webhook_url</code>',
+       'MessageCard with a severity theme colour, plus <em>Open in InfraSight</em> and ' +
+       '<em>Open endpoint</em> action buttons'],
+      ['<code>pagerduty</code>', '<code>routing_key</code>',
+       'Events v2 payload. Recovery resolves the open incident by ' +
+       '<code>dedup_key</code> rather than opening another, and the ' +
+       '<code>links</code> array puts InfraSight and the endpoint on the PagerDuty incident ' +
+       'itself &mdash; which is what a responder is looking at when they are paged.'],
       ['<code>email</code>', '<code>host</code>, <code>from_address</code>, <code>recipients</code>',
        'Port defaults to 587, <code>use_tls</code> true. Sent as ' +
        '<code>multipart/alternative</code>: an HTML part built as a single inline-styled table ' +
@@ -588,6 +594,16 @@ return max(MIN_MONITOR_INTERVAL, interval)           # hard floor, default 30s`,
        '<code>X-InfraSight-Severity</code> headers make mail rules possible without matching on ' +
        'the subject. The SMTP send runs off the event loop.']
     ]),
+
+    DOCS.callout('warn', 'Links need public_base_url, and nothing is guessed',
+      '<p>Every channel carries a link straight to the endpoint&rsquo;s page &mdash; a button in ' +
+      'Slack, Teams and e-mail, a <code>links</code> entry on the PagerDuty incident, and a ' +
+      '<code>links</code> object in the generic webhook payload. All of it resolves through one ' +
+      'helper, so the five channels cannot disagree.</p>' +
+      '<p>It is <strong>absent entirely</strong> until <code>public_base_url</code> is set under ' +
+      'Settings &rarr; General. InfraSight does not infer its own address from a Host header: a ' +
+      'link that silently goes nowhere costs more trust than no link at all. The endpoint&rsquo;s ' +
+      'own monitored URL is always linked regardless, since that one is known.</p>'),
 
     DOCS.callout('tip', 'Secrets in channel configuration',
       '<p>The whole provider config is stored as one Fernet-encrypted blob in ' +

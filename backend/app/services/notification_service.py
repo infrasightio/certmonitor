@@ -266,6 +266,18 @@ def _format_date(value: Any) -> str:
         return str(value)
 
 
+def _alert_link(payload: dict[str, Any]) -> str | None:
+    """Where to send someone who wants to look at this now.
+
+    The endpoint's own page when the alert is about an endpoint, the
+    application otherwise. ``None`` when ``public_base_url`` is unset, and
+    every channel then renders no link rather than a guess - a link that goes
+    nowhere costs more trust than an absent one.
+    """
+    links = payload.get("links") or {}
+    return links.get("endpoint") or links.get("app") or None
+
+
 def _format_moment(value: Any) -> str:
     """A timestamp a person can read, in UTC.
 
@@ -444,7 +456,7 @@ def _slack_blocks(payload: dict[str, Any]) -> list[dict[str, Any]]:
     # Straight to the endpoint when we know it, otherwise the application
     # itself. Absent entirely when public_base_url is unset.
     links = payload.get("links") or {}
-    target = links.get("endpoint") or links.get("app")
+    target = _alert_link(payload)
     if target:
         blocks.append(
             {
@@ -526,6 +538,32 @@ async def _deliver_teams(config: dict[str, Any], payload: dict[str, Any]) -> Non
             }
         ],
     }
+
+    # A MessageCard action renders as a button in the Teams client. Both the
+    # endpoint's own URL and its InfraSight page are offered where known, so
+    # the reader can look at the thing or at what InfraSight saw.
+    actions = []
+    link = _alert_link(payload)
+    if link:
+        actions.append(
+            {
+                "@type": "OpenUri",
+                "name": "Open in InfraSight",
+                "targets": [{"os": "default", "uri": link}],
+            }
+        )
+    endpoint_url = (payload.get("endpoint") or {}).get("url")
+    if endpoint_url:
+        actions.append(
+            {
+                "@type": "OpenUri",
+                "name": "Open endpoint",
+                "targets": [{"os": "default", "uri": endpoint_url}],
+            }
+        )
+    if actions:
+        body["potentialAction"] = actions
+
     async with httpx.AsyncClient(timeout=DELIVERY_TIMEOUT_SECONDS, trust_env=False) as client:
         response = await client.post(config["webhook_url"], json=body)
     if response.status_code >= 400:
@@ -561,6 +599,17 @@ async def _deliver_pagerduty(config: dict[str, Any], payload: dict[str, Any]) ->
             "custom_details": payload.get("details") or {},
         },
     }
+
+    # Events v2 renders these on the PagerDuty incident itself, which is where
+    # a responder is looking when they get paged at 3am.
+    pd_links = []
+    link = _alert_link(payload)
+    if link:
+        pd_links.append({"href": link, "text": "Open in InfraSight"})
+    if endpoint.get("url"):
+        pd_links.append({"href": endpoint["url"], "text": f"Endpoint: {endpoint['url']}"})
+    if pd_links:
+        body["links"] = pd_links
     async with httpx.AsyncClient(timeout=DELIVERY_TIMEOUT_SECONDS, trust_env=False) as client:
         response = await client.post(
             "https://events.pagerduty.com/v2/enqueue", json=body
@@ -590,8 +639,7 @@ def _email_text(payload: dict[str, Any]) -> str:
     for name, value in _summary_fields(payload):
         lines.append(f"  {name + ':':<18} {value}")
 
-    links = payload.get("links") or {}
-    target = links.get("endpoint") or links.get("app")
+    target = _alert_link(payload)
     if target:
         lines.extend(["", f"Open in InfraSight: {target}"])
     lines.extend(
@@ -661,8 +709,7 @@ def _email_html(payload: dict[str, Any]) -> str:
             '</td></tr>'
         )
 
-    links = payload.get("links") or {}
-    target = links.get("endpoint") or links.get("app")
+    target = _alert_link(payload)
     button = ""
     if target:
         button = (
