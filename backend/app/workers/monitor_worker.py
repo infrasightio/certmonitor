@@ -451,6 +451,16 @@ class MonitorWorker:
                 # the capture should show the page that was judged.
                 url=outcome.final_url or endpoint.url,
                 verify_ssl=endpoint.verify_ssl,
+                # The browser must ask the same question the check asked, or it
+                # gets a different answer for reasons that have nothing to do
+                # with the endpoint's health: without these an API key lives
+                # only in the check, and the render photographs a 401.
+                headers={
+                    str(k): str(v) for k, v in (endpoint.custom_headers or {}).items()
+                },
+                # So the render can be judged by the endpoint's own rules. An
+                # endpoint that expects 401 is up when it answers 401.
+                expected_status_codes=endpoint.expected_status_list,
                 outcome=capture_service.outcome_for(outcome),
                 checked_at=outcome.checked_at,
             ),
@@ -466,6 +476,8 @@ class MonitorWorker:
         name: str,
         url: str,
         verify_ssl: bool,
+        headers: dict[str, str],
+        expected_status_codes: list[int],
         outcome: str,
         checked_at: datetime,
     ) -> None:
@@ -476,7 +488,9 @@ class MonitorWorker:
         failure here is allowed to surface as a worker error.
         """
         try:
-            shot = await screenshot.capture(url, verify_ssl=verify_ssl)
+            shot = await screenshot.capture(
+                url, verify_ssl=verify_ssl, headers=headers
+            )
             async with SessionFactory() as session:
                 attached = await capture_service.attach_screenshot(
                     session,
@@ -487,6 +501,11 @@ class MonitorWorker:
                     height=shot.height,
                     error=shot.error,
                     captured_at=checked_at,
+                    # What the browser's own request got, so a render that
+                    # contradicts the check it belongs to is not filed as a
+                    # picture of it.
+                    status=shot.status,
+                    expected_status_codes=expected_status_codes,
                 )
                 await session.commit()
             if attached and shot.ok:

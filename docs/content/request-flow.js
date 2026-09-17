@@ -154,7 +154,16 @@ DOCS.page({
       'commit together or not at all &mdash; a capture can never claim to be the body of a check ' +
       'that was never recorded. A screenshot takes seconds to render; doing it inside the ' +
       'transaction would hold a row lock and a connection open for the duration, so it runs after ' +
-      'the commit as a tracked background task.</p>'),
+      'the commit as a tracked background task.</p>' +
+      '<p>The price is that the render is a <em>second request</em>, made seconds later and ' +
+      'answered by the endpoint on its own terms. On a flapping endpoint it lands on the other ' +
+      'side of the line often enough to matter: the browser gets a 504 while the check that ' +
+      'triggered it got 200, or a healthy page while the check timed out. So the render&rsquo;s ' +
+      'own HTTP status is carried back with the image and compared against the row it would be ' +
+      'filed under, using the endpoint&rsquo;s expected status codes. If they disagree the image ' +
+      'is dropped and the reason is stored in its place &mdash; a picture of a different response ' +
+      'is worse than no picture, which is the same rule that clears the old screenshot when a ' +
+      'capture is replaced.</p>'),
 
     `<h2>A manual check</h2>
     <p><code>POST /api/endpoints/{id}/check</code> runs the same probe from the API process, which is

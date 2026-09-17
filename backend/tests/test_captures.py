@@ -314,6 +314,115 @@ class TestScreenshot:
         )
         assert attached is False
 
+    async def test_a_working_page_is_not_filed_under_a_failure(
+        self, session, endpoint_factory
+    ):
+        """The render is a second request, answered on its own terms. One that
+        succeeds is not a picture of the failure it would sit beside - and a
+        healthy page under "last failed response" is read as the monitor being
+        wrong about the failure."""
+        endpoint = await endpoint_factory()
+        await capture_service.record_check(session, endpoint.id, outcome(up=False))
+        await session.commit()
+
+        await capture_service.attach_screenshot(
+            session,
+            endpoint.id,
+            CaptureOutcome.FAILURE.value,
+            image=b"\xff\xd8\xffhealthy",
+            status=200,
+            expected_status_codes=[200],
+        )
+        await session.commit()
+
+        row = await capture_service.get(
+            session, endpoint.id, CaptureOutcome.FAILURE.value
+        )
+        await session.refresh(row, ["image"])
+        assert row.image is None
+        assert row.image_etag is None
+        assert "200" in row.image_error and "failure" in row.image_error
+
+    async def test_an_error_page_is_not_filed_under_a_success(
+        self, session, endpoint_factory
+    ):
+        """The other half of the same mistake: a 504 page stored against a
+        capture whose own record says HTTP 200."""
+        endpoint = await endpoint_factory()
+        await capture_service.record_check(session, endpoint.id, outcome())
+        await session.commit()
+
+        await capture_service.attach_screenshot(
+            session,
+            endpoint.id,
+            CaptureOutcome.SUCCESS.value,
+            image=b"\xff\xd8\xffgateway timeout",
+            status=504,
+            expected_status_codes=[200],
+        )
+        await session.commit()
+
+        row = await capture_service.get(
+            session, endpoint.id, CaptureOutcome.SUCCESS.value
+        )
+        await session.refresh(row, ["image"])
+        assert row.image is None
+        assert "504" in row.image_error
+
+    async def test_the_endpoints_own_expected_codes_decide_agreement(
+        self, session, endpoint_factory
+    ):
+        """An endpoint that expects 401 is up when it answers 401, so a render
+        that answers 401 belongs on its success row. Judging by 2xx would throw
+        away every screenshot such an endpoint ever takes."""
+        endpoint = await endpoint_factory()
+        await capture_service.record_check(
+            session, endpoint.id, outcome(status_code=401)
+        )
+        await session.commit()
+
+        await capture_service.attach_screenshot(
+            session,
+            endpoint.id,
+            CaptureOutcome.SUCCESS.value,
+            image=b"\xff\xd8\xffauth required",
+            status=401,
+            expected_status_codes=[200, 401],
+        )
+        await session.commit()
+
+        row = await capture_service.get(
+            session, endpoint.id, CaptureOutcome.SUCCESS.value
+        )
+        await session.refresh(row, ["image"])
+        assert row.image == b"\xff\xd8\xffauth required"
+
+    async def test_a_render_with_no_status_is_still_stored(
+        self, session, endpoint_factory
+    ):
+        """A navigation can produce no response of its own. Not knowing what
+        the render got is not evidence that it disagreed, and dropping the
+        image on that basis would lose screenshots for no reason."""
+        endpoint = await endpoint_factory()
+        await capture_service.record_check(session, endpoint.id, outcome(up=False))
+        await session.commit()
+
+        await capture_service.attach_screenshot(
+            session,
+            endpoint.id,
+            CaptureOutcome.FAILURE.value,
+            image=b"\xff\xd8\xffunknown",
+            status=None,
+            expected_status_codes=[200],
+        )
+        await session.commit()
+
+        row = await capture_service.get(
+            session, endpoint.id, CaptureOutcome.FAILURE.value
+        )
+        await session.refresh(row, ["image"])
+        assert row.image == b"\xff\xd8\xffunknown"
+
 
 class TestApi:
     async def test_captures_are_listed_newest_first(

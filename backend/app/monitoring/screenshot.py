@@ -38,6 +38,12 @@ class Shot:
     width: int | None = None
     height: int | None = None
     error: str | None = None
+    # What the browser's OWN request got back. This is a second request to the
+    # endpoint, made seconds after the check and answered independently of it,
+    # so it can differ from the status the check recorded - and on a flapping
+    # endpoint it routinely does. Kept so the caller can tell whether this
+    # picture is of the response it is about to be filed under.
+    status: int | None = None
 
     @property
     def ok(self) -> bool:
@@ -154,7 +160,7 @@ class _Renderer:
                 # `load` rather than `networkidle`: a page that polls - which a
                 # dashboard usually does - never goes idle, and waiting for it
                 # to would time out on exactly the pages worth looking at.
-                await page.goto(url, wait_until="load", timeout=timeout_ms)
+                response = await page.goto(url, wait_until="load", timeout=timeout_ms)
                 image = await page.screenshot(
                     type="jpeg",
                     quality=settings.SCREENSHOT_QUALITY,
@@ -165,6 +171,10 @@ class _Renderer:
                     image=image,
                     width=settings.SCREENSHOT_WIDTH,
                     height=settings.SCREENSHOT_HEIGHT,
+                    # None when the navigation produced no response of its own
+                    # (a same-document navigation, or a download). The caller
+                    # treats that as "cannot tell" rather than as a failure.
+                    status=response.status if response is not None else None,
                 )
         except asyncio.CancelledError:
             raise

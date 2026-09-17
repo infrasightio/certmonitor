@@ -206,6 +206,42 @@ async def record_check(
     return row
 
 
+def _disagrees(
+    outcome: str, status: int | None, expected: list[int] | None
+) -> str | None:
+    """Why this render is not a picture of the response it would be filed under.
+
+    The render is a SECOND request. It is made after the check has committed,
+    by a different client, and the endpoint answers it on its own terms - so on
+    anything flapping it routinely lands on the other side of the line from the
+    check that triggered it. Filing it anyway produces the two screens that
+    prompted this function: a "last successful response - HTTP 200" card
+    showing a 504 page, and a "last failed response - read timeout" card
+    showing a healthy one.
+
+    Judged by the endpoint's own expected codes rather than by 2xx, because an
+    endpoint that expects 401 is up when it answers 401 and down when it
+    answers 200. Returns None when the render agrees, or when there is no
+    status to judge by - an unknown status is not evidence of disagreement.
+    """
+    if status is None:
+        return None
+    rendered_up = status in (expected or [200])
+    if rendered_up == (outcome == CaptureOutcome.SUCCESS.value):
+        return None
+    if rendered_up:
+        return (
+            f"Not stored: the page answered {status} when it was photographed "
+            f"moments after this check, so the picture would have been of a "
+            f"working response, not of the failure recorded above."
+        )
+    return (
+        f"Not stored: the page answered {status} when it was photographed "
+        f"moments after this check, so the picture would have been of an error "
+        f"page, not of the successful response recorded above."
+    )
+
+
 async def attach_screenshot(
     session: AsyncSession,
     endpoint_id: uuid.UUID,
@@ -217,6 +253,8 @@ async def attach_screenshot(
     height: int | None = None,
     error: str | None = None,
     captured_at: datetime | None = None,
+    status: int | None = None,
+    expected_status_codes: list[int] | None = None,
 ) -> bool:
     """Merge a rendered screenshot into an existing capture row.
 
@@ -226,6 +264,11 @@ async def attach_screenshot(
     the other outcome. Writing the image onto whatever row happens to be there
     would attach a picture of one response to the record of another, so it is
     dropped instead.
+
+    The same reasoning rejects a render that contradicts the row it belongs to
+    even when nothing has been replaced - see `_disagrees`. Both cases keep the
+    invariant the panel is built on: the picture is of the response beside it,
+    or there is no picture and a sentence saying why.
     """
     row = await get(session, endpoint_id, outcome)
     if row is None:
@@ -241,6 +284,15 @@ async def attach_screenshot(
             outcome=outcome,
         )
         return False
+
+    if image and (mismatch := _disagrees(outcome, status, expected_status_codes)):
+        logger.info(
+            "screenshot_dropped_mismatch",
+            endpoint_id=str(endpoint_id),
+            outcome=outcome,
+            rendered_status=status,
+        )
+        image, error = None, mismatch
 
     if image:
         row.image = image
