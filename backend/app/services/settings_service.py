@@ -516,6 +516,17 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         max_value=1440,
     ),
     SettingSpec(
+        key="change_require_rollback_plan_for_high_risk",
+        value_type="bool",
+        default=True,
+        category="changes",
+        label="Require a rollback plan for high-risk changes",
+        description=(
+            "A change marked high risk cannot be submitted until it says how "
+            "it would be undone. Drafts can still be saved without one."
+        ),
+    ),
+    SettingSpec(
         key="allowed_intervals",
         value_type="json",
         default=_INTERVAL_CHOICES,

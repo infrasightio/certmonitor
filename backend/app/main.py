@@ -151,7 +151,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         worker_enabled=settings.WORKER_ENABLED,
     )
 
-    if settings.is_production and settings.JWT_SECRET and len(settings.JWT_SECRET) < 32:
+    # A generated secret is fatal in production - Settings refuses to build at
+    # all - so reaching here with one means this is a dev or test environment.
+    # Say so anyway: the same footgun is merely survivable here, not absent.
+    if settings.jwt_secret_is_generated:
+        logger.warning(
+            "generated_jwt_secret",
+            detail=(
+                "JWT_SECRET is not set, so one was generated for this process. "
+                "Sessions end at restart and encrypted endpoint credentials "
+                "cannot be read back afterwards. Set JWT_SECRET before using "
+                "this instance for anything you intend to keep."
+            ),
+        )
+    elif settings.is_production and len(settings.JWT_SECRET) < 32:
         logger.warning(
             "weak_jwt_secret",
             detail="Set JWT_SECRET to at least 32 random characters.",

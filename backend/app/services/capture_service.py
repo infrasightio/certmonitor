@@ -72,6 +72,33 @@ def _is_text(content_type: str | None) -> bool:
     return lowered.startswith(_TEXT_TYPES)
 
 
+# A NUL this early is a magic number, not a typo: ZIP and JPEG put one at
+# byte 4, GIF at 6, PNG at 8. The bound stays under the length of the
+# shortest plausible HTML document, so a stray NUL in real markup is not
+# mistaken for a file header.
+_BINARY_PREFIX_CHARS = 12
+# Past this share of a sample large enough to judge, it is binary whatever the
+# first bytes looked like. Short bodies are exempt: one NUL in twenty
+# characters is a high proportion and tells you nothing.
+_MAX_NUL_SHARE = 0.02
+_NUL_SAMPLE_MIN = 256
+
+
+def _looks_binary(text: str) -> bool:
+    """Whether a body claiming to be text is really a mislabelled file.
+
+    Position first, then density. Testing only "is there a NUL in the first
+    kilobyte" cannot tell a ZIP header from one stray byte in an error page,
+    and rejecting the page loses exactly the response captures exist to keep.
+    """
+    if "\x00" in text[:_BINARY_PREFIX_CHARS]:
+        return True
+    sample = text[:1024]
+    if len(sample) < _NUL_SAMPLE_MIN:
+        return False
+    return sample.count("\x00") / len(sample) > _MAX_NUL_SHARE
+
+
 def decode_body(raw: bytes | None, content_type: str | None) -> str | None:
     """Turn the probe's raw bytes into something worth showing, or None.
 
@@ -91,7 +118,7 @@ def decode_body(raw: bytes | None, content_type: str | None) -> str | None:
     text = raw.decode("utf-8", errors="replace")
     # Binary mislabelled as text. Checked before the strip below, because a
     # stripped JPEG is not a document, it is noise.
-    if "\x00" in text[:1024]:
+    if _looks_binary(text):
         return None
     text = text[:MAX_BODY_CHARS]
     return text.replace("\x00", "") if "\x00" in text else text

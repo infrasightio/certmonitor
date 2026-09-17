@@ -1,0 +1,132 @@
+# Continuous integration.
+#
+# This exists because its absence was expensive. The backend suite had a test
+# asserting the CSV import template was valid; a later migration added two
+# columns to the template's header without updating its example rows, and the
+# test went red and stayed red, unnoticed, because nothing ran it. Frontend
+# linting was broken in the same way and for the same reason.
+#
+# The jobs are deliberately cheap. The backend suite runs against SQLite
+# (tests/conftest.py provisions it), so no service containers are needed and
+# the whole workflow finishes in a couple of minutes on a pull request.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # So a red main can be re-checked without an empty commit.
+  workflow_dispatch:
+
+# A new push supersedes an in-flight run for the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Matches the version in backend/Dockerfile.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # `playwright install` is deliberately absent. The pip package is there
+      # (it is imported), but nothing in the suite launches a browser: capture
+      # tests hand `attach_screenshot` bytes directly, and screenshots are off
+      # by default. Downloading Chromium would add minutes to exercise nothing.
+      #
+      # `-m "not network"` matches no test today. It is the marker pytest.ini
+      # declares for tests needing outbound access, so the guard is already in
+      # place the day someone adds one.
+      - name: Run tests
+        run: pytest -m "not network"
+
+  frontend:
+    name: Frontend lint and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Matches the builder stage in frontend/Dockerfile.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # `npm ci` needs a lock file. Fall back to `npm install` so the workflow
+      # is useful before one is committed, rather than failing on setup.
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            echo "::warning::No package-lock.json; falling back to npm install." \
+                 "Commit a lock file so CI builds what you build."
+            npm install
+          fi
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+  images:
+    name: Docker images build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Built but not pushed: this only has to prove the Dockerfiles still
+      # assemble. Publishing is a release concern, not a per-commit one.
+      - name: Build backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Repo root, not ./frontend: the image bundles the documentation site
+      # from docs/ alongside the SPA, so the context has to span both. This
+      # mirrors the `context: .` / `dockerfile: frontend/Dockerfile` pair in
+      # docker-compose.yml.
+      - name: Build frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./frontend/Dockerfile
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

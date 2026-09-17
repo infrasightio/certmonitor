@@ -38,6 +38,25 @@ class ChangeActivityRead(BaseModel):
     created_at: datetime
 
 
+class ChangeConflict(BaseModel):
+    """Another planned change whose window overlaps this one.
+
+    Advisory. Overlapping windows are sometimes deliberate, so nothing in the
+    workflow refuses them - the conflict is reported and the team decides.
+    """
+
+    id: int
+    reference: str
+    title: str
+    status: str
+    application: str
+    environment: str | None = None
+    expected_start_at: datetime
+    expected_duration_minutes: int
+    shared_endpoints: list[str] = Field(default_factory=list)
+    reason: str
+
+
 class ChangeListItem(BaseModel):
     id: int
     reference: str
@@ -80,6 +99,11 @@ class ChangeRead(ChangeListItem):
     can_finish: bool = False
     can_cancel: bool = False
     can_comment: bool = False
+
+    # Advisory, both computed server-side: what stands between this change and
+    # submission, and which other planned changes want the same window.
+    submission_blockers: list[str] = Field(default_factory=list)
+    conflicts: list[ChangeConflict] = Field(default_factory=list)
 
 
 class ChangeCreate(BaseModel):
@@ -229,6 +253,8 @@ def to_read(
     *,
     permissions: dict[str, bool] | None = None,
     include_timeline: bool = True,
+    submission_blockers: list[str] | None = None,
+    conflicts: list[dict[str, Any]] | None = None,
 ) -> ChangeRead:
     """Build the detail view.
 
@@ -266,5 +292,7 @@ def to_read(
         ]
         if include_timeline
         else [],
+        submission_blockers=list(submission_blockers or []),
+        conflicts=[ChangeConflict(**c) for c in (conflicts or [])],
         **permissions,
     )

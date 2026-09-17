@@ -318,6 +318,7 @@ async def create_endpoint(
         effective_interval_seconds=monitoring_service.resolve_check_interval(
             endpoint, config
         ),
+        thresholds=monitoring_service.resolve_thresholds(endpoint, config),
     )
 
 
@@ -343,6 +344,7 @@ async def get_endpoint(
         effective_interval_seconds=monitoring_service.resolve_check_interval(
             endpoint, config
         ),
+        thresholds=monitoring_service.resolve_thresholds(endpoint, config),
     )
 
 
@@ -392,6 +394,7 @@ async def update_endpoint(
         effective_interval_seconds=monitoring_service.resolve_check_interval(
             endpoint, config
         ),
+        thresholds=monitoring_service.resolve_thresholds(endpoint, config),
     )
 
 
@@ -468,6 +471,7 @@ async def set_monitoring_state(
         effective_interval_seconds=monitoring_service.resolve_check_interval(
             endpoint, config
         ),
+        thresholds=monitoring_service.resolve_thresholds(endpoint, config),
     )
 
 

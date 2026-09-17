@@ -238,7 +238,15 @@ class Endpoint(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     auth_secret_hint: Mapped[str | None] = mapped_column(String(64))
 
     # -------------------------------------------------- alert thresholds
-    failure_threshold: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    # All four are overrides, and NULL means "inherit" - from the environment
+    # if it sets one, otherwise from the global runtime setting. See
+    # monitoring_service.resolve_thresholds.
+    #
+    # `failure_threshold` used to be NOT NULL with a default of 3, which quietly
+    # broke that chain: every endpoint was created carrying a concrete value, so
+    # resolution always stopped at the endpoint and an environment-level or
+    # global threshold could never apply to anything.
+    failure_threshold: Mapped[int | None] = mapped_column(Integer)
     response_time_threshold_ms: Mapped[int | None] = mapped_column(Integer)
     ssl_warning_days: Mapped[int | None] = mapped_column(Integer)
     ssl_critical_days: Mapped[int | None] = mapped_column(Integer)

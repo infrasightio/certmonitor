@@ -85,9 +85,6 @@ export default function ChangeForm({ open, onClose, onSaved, change, environment
       })
       setSelected([])
     }
-    // `environments` is deliberately not a dependency: it arrives from its own
-    // fetch, and re-running this would wipe whatever the user had typed.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, change])
 
   // Load endpoints so the requester can mark which ones the deployment
@@ -351,7 +348,15 @@ export default function ChangeForm({ open, onClose, onSaved, change, environment
           </div>
         </Field>
 
-        <Field label="Rollback plan" hint="How this is undone if it goes wrong.">
+        <Field
+          label="Rollback plan"
+          required={form.risk === 'high'}
+          hint={
+            form.risk === 'high'
+              ? 'Required: a high-risk change cannot be submitted without one.'
+              : 'How this is undone if it goes wrong.'
+          }
+        >
           <textarea
             className="input"
             rows={2}

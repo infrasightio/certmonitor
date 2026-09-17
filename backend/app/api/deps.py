@@ -70,16 +70,22 @@ async def get_current_user(
     user = await user_service.get_user(session, user_id)
     if user is None:
         raise _UNAUTHENTICATED
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="This account is disabled.",
-        )
+    # Token validity first. Disabling a user bumps `token_version`, so their
+    # token is revoked, not merely unauthorised - and answering 403 for a
+    # revoked credential both tells the holder the account exists and leaves
+    # the SPA showing a permission error instead of returning them to sign-in.
     if int(payload.get("tv", 0)) != int(user.token_version or 0):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Session is no longer valid. Please sign in again.",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+    # Still needed: an account disabled directly in the database carries no
+    # version bump, and must not be served on a token that is otherwise valid.
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This account is disabled.",
         )
 
     request.state.user = user
@@ -126,13 +132,11 @@ def require_permissions(*codes: str) -> Callable[..., Any]:
                 role=user.role_name,
                 missing=missing,
             )
+            # Deliberately the same message whatever is missing: naming the
+            # permission tells an unauthorised caller what to go looking for.
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=(
-                    "Your role does not permit this action."
-                    if len(missing) == 1
-                    else "Your role does not permit this action."
-                ),
+                detail="Your role does not permit this action.",
             )
         return user
 

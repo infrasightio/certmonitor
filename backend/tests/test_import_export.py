@@ -9,6 +9,7 @@ import uuid
 from sqlalchemy import func, select
 
 from app.models.endpoint import Endpoint
+from app.services.import_export_service import CSV_TEMPLATE_COLUMNS
 
 VALID_CSV = b"""name,url,environment,tags,interval,timeout,description
 Translation API,https://api.example.com/health,production,"backend,critical",60,10,Translation backend
@@ -313,6 +314,56 @@ class TestTemplate:
         preview = await upload(client, admin_headers, response.content, "template.csv")
         assert preview.json()["valid_count"] == 2
 
+    async def test_template_rows_line_up_with_the_header(self, client, admin_headers):
+        """Every example value has to sit under the column it belongs to.
+
+        The rows used to be written as positional lists, so adding a column in
+        the middle shifted every later value one field to the left. The
+        importer is lenient enough that the result still previewed as valid -
+        it just created endpoints whose method was `http` and whose
+        application was `GET`. This asserts the alignment directly.
+        """
+        response = await client.get("/api/import/template", headers=admin_headers)
+        rows = list(
+            csv.DictReader(io.StringIO(response.content.decode("utf-8-sig")))
+        )
+
+        assert rows, "the template must ship example rows"
+        for row in rows:
+            # A short row leaves trailing keys as None; a long row collects the
+            # surplus under the None key. Either means a misalignment.
+            assert None not in row
+            assert not any(value is None for value in row.values())
+            assert list(row) == CSV_TEMPLATE_COLUMNS
+
+        assert rows[0]["method"] == "GET"
+        assert rows[0]["check_type"] == "http"
+        assert rows[0]["application"] == "Checkout"
+        assert rows[0]["expected_status"] == "200"
+
+    async def test_imported_template_row_keeps_every_field(
+        self, client, admin_headers
+    ):
+        template = await client.get("/api/import/template", headers=admin_headers)
+        preview = await upload(client, admin_headers, template.content, "template.csv")
+        confirmed = await client.post(
+            "/api/import/confirm",
+            json={"token": preview.json()["token"]},
+            headers=admin_headers,
+        )
+        assert confirmed.status_code == 200, confirmed.text
+
+        listing = await client.get(
+            "/api/endpoints", params={"search": "Checkout API"}, headers=admin_headers
+        )
+        endpoint = listing.json()["items"][0]
+        assert endpoint["http_method"] == "GET"
+        assert endpoint["check_type"] == "http"
+        assert endpoint["application"] == "Checkout"
+        assert endpoint["team"] == "Platform"
+        assert endpoint["owner_name"] == "Platform Team"
+        assert endpoint["master_node_ip"] == "10.0.0.11"
+
 
 class TestExport:
     async def test_csv_export_contains_the_endpoint(self, client, admin_headers):
@@ -426,15 +477,15 @@ class TestSslExport:
 
     async def _certificate(self, session, client, admin_headers, **overrides):
         from datetime import datetime, timedelta, timezone
+        from urllib.parse import urlparse
 
         from app.models.monitoring import SslCertificate
 
+        name = overrides.pop("name", "Payments API")
+        url = overrides.pop("url", "https://payments.example.com/health")
         created = await client.post(
             "/api/endpoints",
-            json={
-                "name": overrides.pop("name", "Payments API"),
-                "url": overrides.pop("url", "https://payments.example.com/health"),
-            },
+            json={"name": name, "url": url},
             headers=admin_headers,
         )
         endpoint_id = created.json()["id"]
@@ -442,7 +493,11 @@ class TestSslExport:
         expires = datetime.now(timezone.utc) + timedelta(days=45)
         row = SslCertificate(
             endpoint_id=uuid.UUID(endpoint_id),
-            common_name="payments.example.com",
+            # Derived from the URL, not hardcoded. The search filter matches
+            # the certificate's common name as well as the endpoint's name, so
+            # giving every certificate "payments.example.com" made a search for
+            # "Payments" match endpoints it was never meant to.
+            common_name=overrides.pop("common_name", urlparse(url).hostname),
             issuer_common_name="R3",
             issuer="Let's Encrypt",
             valid_to=expires,

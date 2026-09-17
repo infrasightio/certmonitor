@@ -177,16 +177,6 @@ export default function UsersPage() {
     }
   }
 
-  const quickToggle = async (target, changes, label) => {
-    try {
-      await usersApi.update(target.id, changes)
-      toast.success(label)
-      load()
-    } catch (err) {
-      toast.error(err.message)
-    }
-  }
-
   /**
    * Let someone sign in again immediately.
    *

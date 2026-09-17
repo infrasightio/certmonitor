@@ -4,10 +4,26 @@ from __future__ import annotations
 
 from datetime import datetime
 
+import email_validator
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.core.enums import RoleName
 from app.schemas.common import ORMModel
+
+# `email-validator` refuses RFC 2606 / RFC 6761 special-use domains outright,
+# which for a public signup form is right and here is not: InfraSight is run
+# on internal infrastructure, where `ops@company.internal` and `admin@srv.local`
+# are the addresses people actually have. The bundled ADMIN_EMAIL default is
+# `admin@localhost`, so the library would reject the product's own default.
+#
+# `arpa` and `onion` stay refused - neither is a plausible mailbox here, and
+# leaving them in keeps the guard doing something. Everything else about the
+# address is still validated normally.
+email_validator.SPECIAL_USE_DOMAIN_NAMES = [
+    name
+    for name in email_validator.SPECIAL_USE_DOMAIN_NAMES
+    if name in {"arpa", "onion"}
+]
 
 
 class UserRead(ORMModel):

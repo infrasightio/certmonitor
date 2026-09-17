@@ -521,11 +521,15 @@ class TestResetSignInLimits:
         Trip the rate limiter, confirm the 429, then reset and confirm the
         correct password is accepted rather than refused for another window.
         """
+        from app.core.config import settings
         from app.core.ratelimit import check_login_rate_limit
 
         # Exhaust the per-username budget directly, the way a run of failed
-        # sign-ins would.
-        for _ in range(20):
+        # sign-ins would. Sized from the setting rather than a fixed count:
+        # conftest raises LOGIN_RATE_LIMIT_ATTEMPTS to 50 so the other tests
+        # are not throttled, and a hardcoded 20 never reached the limit, so
+        # this asserted nothing.
+        for _ in range(settings.LOGIN_RATE_LIMIT_ATTEMPTS + 1):
             result = await check_login_rate_limit("user:blocked1")
             if not result.allowed:
                 break

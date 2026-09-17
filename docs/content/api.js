@@ -486,35 +486,79 @@ DOCS.page({
 }`, 'request') }),
 
     DOCS.endpoint({ method: 'GET', path: '/api/changes/{id}', permission: 'change:read',
-      summary: 'Full detail with comments and the activity timeline.' }),
+      summary: 'Full detail with comments, the activity timeline and two advisory lists.',
+      body: `<p>Alongside the server-computed <code>can_*</code> permissions, the payload carries
+      <code>submission_blockers[]</code> and <code>conflicts[]</code>. Both are advisory and
+      recomputed on every read.</p>` +
+        DOCS.code(`{
+  "submission_blockers": [
+    "a high-risk change needs a rollback plan before it can be submitted"
+  ],
+  "conflicts": [
+    {
+      "id": 41,
+      "reference": "CHG-2026-0041",
+      "title": "Payments schema migration",
+      "status": "approved",
+      "application": "payments",
+      "environment": "production",
+      "expected_start_at": "2026-09-18T21:30:00Z",
+      "expected_duration_minutes": 60,
+      "shared_endpoints": [],
+      "reason": "targets the same application and environment (payments / production)"
+    }
+  ]
+}`, 'response') +
+        `<p><code>conflicts[]</code> lists changes still in <code>draft</code>,
+        <code>pending_approval</code>, <code>approved</code> or
+        <code>deployment_in_progress</code> whose window overlaps this one, either because they
+        name the same application and environment or because they share an endpoint. Nothing in
+        the workflow refuses a conflicting change.</p>` }),
 
     DOCS.endpoint({ method: 'PUT', path: '/api/changes/{id}', permission: 'change:write',
-      summary: 'Edit. Only possible while DRAFT or PENDING_APPROVAL.' }),
+      summary: 'Edit. Only possible while DRAFT or PENDING_APPROVAL.',
+      body: `<p><strong>403</strong> only when the caller is neither the requester nor an
+      administrator. A change that has moved past PENDING_APPROVAL answers <strong>400</strong>
+      &mdash; &ldquo;a change in &lsquo;completed&rsquo; can no longer be edited&rdquo;. The two are
+      kept apart deliberately: an administrator editing a finished change is not a permissions
+      problem, and saying so sent people looking in the wrong place.</p>` }),
 
     DOCS.endpoint({ method: 'POST', path: '/api/changes/{id}/submit', permission: 'change:write',
-      summary: 'Submit. Auto-approves where the environment does not require approval.' }),
+      summary: 'Submit. Auto-approves where the environment does not require approval.',
+      body: `<p>400 when the change is not a draft, or when <code>submission_blockers</code> is
+      non-empty &mdash; currently only &ldquo;a high-risk change needs a rollback plan before it
+      can be submitted&rdquo;, which
+      <code>change_require_rollback_plan_for_high_risk</code> turns off.</p>` }),
 
     DOCS.endpoint({ method: 'POST', path: '/api/changes/{id}/approve', permission: 'change:approve',
       summary: 'Approve. You cannot approve your own request.',
-      body: DOCS.code(`{"comment": "Rollback plan verified."}`, 'request') }),
+      body: DOCS.code(`{"comment": "Rollback plan verified."}`, 'request') +
+        `<p>The body is optional &mdash; its only field is. A comment, when given, is also posted to
+        the change&rsquo;s timeline.</p>` }),
 
     DOCS.endpoint({ method: 'POST', path: '/api/changes/{id}/reject', permission: 'change:approve',
       summary: 'Reject. A reason is required.',
       body: DOCS.code(`{"reason": "No rollback plan for the schema migration."}`, 'request') }),
 
     DOCS.endpoint({ method: 'POST', path: '/api/changes/{id}/cancel', permission: 'change:write',
-      summary: 'Cancel. Not available while a deployment is in progress.' }),
+      summary: 'Cancel. Not available while a deployment is in progress.',
+      body: `<p>The body is optional; a <code>reason</code> is recorded on the timeline when given.
+      <strong>403</strong> only for a caller who is neither the requester nor an administrator;
+      a deployment in progress answers <strong>400</strong> telling you to complete it or mark it
+      failed, so monitoring resumes.</p>` }),
 
     DOCS.endpoint({ method: 'POST', path: '/api/changes/{id}/start-deployment', permission: 'change:deploy',
       summary: 'Begin. Pauses monitoring on the affected endpoints.',
-      body: `<p>400 when the change is not APPROVED, or when another deployment is already running for
-      the same application and environment &mdash; the message names the other change, who started it
-      and when.</p>` }),
+      body: `<p>400 when the change is not APPROVED. <strong>409</strong> when another deployment is
+      already running for the same application and environment &mdash; the message names the other
+      change, who started it and when. That is the only hard conflict block; overlapping
+      <em>planned</em> windows are reported on the detail payload and never refused.</p>` }),
 
     DOCS.endpoint({ method: 'POST', path: '/api/changes/{id}/complete', permission: 'change:deploy',
       summary: 'Finish successfully. Resumes monitoring and health-checks.',
       body: DOCS.code(`{"deployment_notes": "Rolled out to all three replicas."}`, 'request') +
-        `<p>Restricted to the person who started the deployment, or an administrator.</p>` }),
+        `<p>The body is optional. Restricted to the person who started the deployment, or an
+        administrator.</p>` }),
 
     DOCS.endpoint({ method: 'POST', path: '/api/changes/{id}/fail', permission: 'change:deploy',
       summary: 'Mark failed. A reason is required. Still resumes monitoring.',

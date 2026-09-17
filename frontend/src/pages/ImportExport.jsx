@@ -24,7 +24,8 @@ export default function ImportExport() {
   const canImport = can('endpoint:import')
 
   const fileInput = useRef(null)
-  const [file, setFile] = useState(null)
+  // Only ever written: the preview, not the File object, is what the UI shows.
+  const [, setFile] = useState(null)
   const [preview, setPreview] = useState(null)
   const [result, setResult] = useState(null)
   const [uploading, setUploading] = useState(false)

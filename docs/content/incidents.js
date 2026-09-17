@@ -77,7 +77,12 @@ DOCS.page({
     DOCS.table(['Field', 'Content'], [
       ['<code>status</code>', '<code>open</code> or <code>resolved</code>'],
       ['<code>severity</code>', '<code>critical</code> for an automatically opened incident'],
-      ['<code>started_at</code>', 'The <code>checked_at</code> of the failing check that opened it'],
+      ['<code>started_at</code>',
+       'The <code>checked_at</code> of the <strong>first</strong> failing check of the outage, not ' +
+       'of the threshold check that opened the incident. Derived by looking back through ' +
+       '<code>monitoring_results</code> to the last non-failing check. Dating it from the threshold ' +
+       'instead understated every outage by (threshold &minus; 1) intervals &mdash; two minutes at ' +
+       'the defaults &mdash; and that shortfall fed straight into downtime and availability.'],
       ['<code>resolved_at</code>, <code>duration_seconds</code>', 'Set on recovery'],
       ['<code>reason</code>', 'The <code>failure_reason</code> at the time, updated if it changes'],
       ['<code>error_message</code>, <code>first_failure_status_code</code>',

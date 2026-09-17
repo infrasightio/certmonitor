@@ -207,9 +207,14 @@ def normalise_status_codes(raw: str | None, *, default: str = "200") -> str:
     unique = sorted({int(t) for t in tokens})
     result = ",".join(str(code) for code in unique)
     if len(result) > 128:
-        # Keep it storable; a class like "2xx" expands past the column width.
+        # The column is String(128) and the stored form is a plain list of
+        # codes, so the expansion has to fit. Any whole class does not: "2xx"
+        # becomes 100 codes, about 400 characters. Rejecting beats truncating
+        # silently, which would quietly widen what counts as healthy.
         raise UrlValidationError(
-            "expected status specification is too long - use fewer codes"
+            "expected status specification is too long - use fewer codes. "
+            "A whole class such as '2xx' never fits; give the codes you "
+            "actually accept, or a narrow range like '200-204'."
         )
     return result
 

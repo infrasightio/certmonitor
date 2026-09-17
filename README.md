@@ -362,7 +362,7 @@ that matter most:
 | Variable | Purpose |
 |---|---|
 | `POSTGRES_PASSWORD` | Database password. Compose fails fast if unset. |
-| `JWT_SECRET` | Signs access/refresh tokens. Use ≥ 32 random chars. Changing it invalidates every session. |
+| `JWT_SECRET` | Signs access/refresh tokens, and seeds `ENCRYPTION_KEY` when that is blank. Use ≥ 32 random chars. **The API refuses to start without it when `APP_ENV` is `production` or `staging`** — a per-process fallback would make replicas reject each other's tokens and would lose every encrypted credential at the next restart. Changing it invalidates every session. |
 | `ADMIN_PASSWORD` | Initial administrator password. Used only when the account is first created. |
 
 ### Frequently tuned
@@ -1170,12 +1170,14 @@ Under **Settings → Change management**:
 | `change_approval_environments` | `production` | Changes targeting these environments need approval first. Comma-separated. |
 | `change_health_check_on_resume` | `true` | Check the affected endpoints the moment monitoring resumes. |
 | `change_max_pause_minutes` | `240` | Flag deployments whose pause runs longer than this. |
+| `change_require_rollback_plan_for_high_risk` | `true` | A high-risk change cannot be submitted without a rollback plan. |
 
 ### Using it
 
 1. **New change** — title, application, environment, risk, description, planned
-   date/time and duration, plus the endpoints the deployment touches. Rollback
-   plan optional but recommended.
+   date/time and duration, plus the endpoints the deployment touches. A rollback
+   plan is optional, except on a high-risk change, which cannot be submitted
+   without one.
 2. **Submit.** Production goes to *Pending approval*; anything else is approved
    automatically.
 3. An approver opens **Pending approval** and approves or rejects with a reason.
@@ -1194,7 +1196,7 @@ GET    /api/changes/dashboard              counts, active, upcoming, overrunning
 GET    /api/changes/options                statuses, risks, known applications
 POST   /api/changes                        create (draft)
 GET    /api/changes/{id}                   detail incl. endpoints, comments, activity, permissions
-PUT    /api/changes/{id}                   edit (draft or rejected only)
+PUT    /api/changes/{id}                   edit (draft or pending approval only)
 POST   /api/changes/{id}/submit            draft -> pending approval (or approved)
 POST   /api/changes/{id}/approve
 POST   /api/changes/{id}/reject            requires a reason
@@ -1208,6 +1210,18 @@ POST   /api/changes/{id}/comments
 `GET /api/changes/{id}` returns server-computed `can_edit`, `can_submit`,
 `can_approve`, `can_deploy`, `can_finish`, `can_cancel` and `can_comment`, so the
 UI never re-derives the workflow rules and cannot drift from the API.
+
+The same payload carries two advisory lists:
+
+- `submission_blockers[]` — why this change cannot be submitted yet, so the UI
+  disables Submit with a reason instead of failing on click. Currently only one
+  rule populates it: a high-risk change needs a rollback plan.
+- `conflicts[]` — other changes still planned (`draft`, `pending_approval`,
+  `approved`, `deployment_in_progress`) whose window overlaps this one, either
+  because they name the same application and environment or because they share
+  an endpoint. Advisory: nothing in the workflow refuses a conflicting change.
+  The one hard block is two deployments *in progress* for the same application
+  and environment, which returns `409`.
 
 ---
 
@@ -1757,11 +1771,29 @@ and the JSON/BigInteger columns carry SQLite variants for exactly this reason.
 | `test_rca.py` | RCA never blocking the incident, team ownership without a new role, drafts that never invent a fact, and a search parser that refuses what it cannot parse |
 | `test_diagnostics.py` | The Diagnose reasoning layer: evidence ranking, confidence bands, severity classification, and the honesty rules that stop it inventing infrastructure it cannot see |
 | `test_health_and_settings.py` | Probes, security headers, settings validation, user management invariants, channels, OpenAPI completeness |
-| `test_changes.py` | The change workflow and its effect on monitoring: approval routing, self-approval refused, pause on deploy, resume on complete/fail, an already-paused endpoint left alone, concurrent-deployment conflict, activity timeline |
+| `test_changes.py` | The change workflow and its effect on monitoring: approval routing, self-approval refused, pause on deploy, resume on complete/fail, an already-paused endpoint left alone, concurrent-deployment conflict, activity timeline, the high-risk rollback rule, overlapping-window conflict detection |
+| `test_config.py` | Configuration guards, chiefly that production and staging refuse to start without a supplied `JWT_SECRET` |
 
 HTTP responses are stubbed with `respx`, and certificates are generated
 in-process with `cryptography`, so the valid/expiring/expired/invalid cases are
 real X.509 material going through the same parsing path a live handshake uses.
+
+### Continuous integration
+
+`.github/workflows/ci.yml` runs on every push to `main`, on every pull request,
+and on demand. Three jobs in parallel:
+
+| Job | Runs |
+|---|---|
+| Backend tests | Python 3.12, `pytest -m "not network"`. No service containers — the suite provisions its own SQLite file. |
+| Frontend lint and build | Node 20, `npm ci`, `npm run lint`, `npm run build`. |
+| Docker images build | Both images via Buildx with a layer cache; neither is pushed. |
+
+It was added after two failures had been sitting in the repository unnoticed,
+both because nothing ran them: `test_template_is_downloadable_and_reimportable`
+had been red since a migration added two columns to the CSV template's header
+without updating its example rows, and `npm run lint` failed outright because
+ESLint 9 reads `eslint.config.js` and only a legacy `.eslintrc.json` existed.
 
 ---
 

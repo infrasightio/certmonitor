@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from sqlalchemy import BigInteger, DateTime, Integer, MetaData, Uuid, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-from sqlalchemy.types import JSON
+from sqlalchemy.types import JSON, TypeDecorator
 
 # Explicit, predictable constraint names keep Alembic autogenerate diffs clean.
 NAMING_CONVENTION = {
@@ -23,8 +23,48 @@ NAMING_CONVENTION = {
 # suite can run on SQLite.
 JSONType = JSON().with_variant(JSONB, "postgresql")
 
+class UtcDateTime(TypeDecorator):
+    """A timezone-aware UTC timestamp, on every dialect.
+
+    PostgreSQL's ``TIMESTAMP WITH TIME ZONE`` hands back aware datetimes.
+    SQLite has no such type: it ignores ``timezone=True`` and returns naive
+    ones. The application treats these columns as aware throughout - it
+    subtracts two of them, and compares them against
+    ``datetime.now(timezone.utc)`` - so under SQLite that code raised
+    ``TypeError: can't subtract offset-naive and offset-aware datetimes``.
+
+    That made the difference invisible where it mattered most: the test suite
+    runs on SQLite, so the paths doing the arithmetic could not be exercised
+    there at all, while the same code was fine in production.
+
+    Binding normalises to UTC, loading re-attaches it, so the invariant the
+    rest of the codebase assumes actually holds. The DDL is unchanged - the
+    decorator delegates it to ``DateTime(timezone=True)`` - so no migration is
+    involved.
+    """
+
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_bind_param(self, value: datetime | None, dialect) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            # A naive value reaching the database is a bug somewhere upstream,
+            # but silently storing it as local time would be the worse answer.
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+
+    def process_result_value(self, value: datetime | None, dialect) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+
+
 # Always store timezone-aware UTC timestamps.
-TimestampTZ = DateTime(timezone=True)
+TimestampTZ = UtcDateTime()
 
 # SQLite has no autoincrementing BIGINT - only INTEGER PRIMARY KEY - so the
 # high-volume tables map to INTEGER there and BIGINT on PostgreSQL. Without

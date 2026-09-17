@@ -647,13 +647,20 @@ def _extract_days(text: str, default: int) -> int:
 
 
 def _extract_ms(text: str) -> float | None:
-    """Pull a latency threshold out of phrases like 'above 1 second' or '>500ms'."""
-    seconds = re.search(r"(\d+(?:\.\d+)?)\s*(?:second|sec|s)\b", text)
-    if seconds:
-        return float(seconds.group(1)) * 1000
-    millis = re.search(r"(\d+(?:\.\d+)?)\s*(?:millisecond|ms)\b", text)
+    """Pull a latency threshold out of phrases like 'above 1 second' or '>500ms'.
+
+    The units accept a plural. Without it, "2 seconds" - the way people
+    actually write it - matched nothing and the caller quietly fell back to
+    its 1000 ms default, so the answer confidently described a threshold the
+    question never asked for. Milliseconds are checked first: "500 ms" would
+    otherwise be caught by the bare `s` alternative and read as 500 seconds.
+    """
+    millis = re.search(r"(\d+(?:\.\d+)?)\s*(?:milliseconds?|msecs?|ms)\b", text)
     if millis:
         return float(millis.group(1))
+    seconds = re.search(r"(\d+(?:\.\d+)?)\s*(?:seconds?|secs?|s)\b", text)
+    if seconds:
+        return float(seconds.group(1)) * 1000
     return None
 
 

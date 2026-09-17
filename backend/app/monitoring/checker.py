@@ -324,8 +324,37 @@ async def _reject_redirect_to_blocked_address(response: httpx.Response) -> None:
         )
 
 
+def _unwrap(exc: BaseException) -> BaseException:
+    """Find the exception that actually explains the failure.
+
+    What reaches the caller is not always what was raised. httpx runs the
+    redirect guard inside an anyio task group, and anyio wraps anything raised
+    there in a ``BaseExceptionGroup``; other layers re-raise with the original
+    hanging off ``__cause__``. Classifying the wrapper instead of its contents
+    turned a deliberate SSRF refusal into a generic `unknown_error`, which is
+    the one failure reason an operator cannot act on.
+    """
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, BaseExceptionGroup):
+            # Prefer a group member we recognise; otherwise take the first.
+            for inner in current.exceptions:
+                unwrapped = _unwrap(inner)
+                if isinstance(unwrapped, (_RedirectToBlockedAddress, httpx.HTTPError)):
+                    return unwrapped
+            current = current.exceptions[0] if current.exceptions else None
+            continue
+        if isinstance(current, (_RedirectToBlockedAddress, httpx.HTTPError)):
+            return current
+        current = current.__cause__ or current.__context__
+    return exc
+
+
 def _classify_httpx_error(exc: Exception) -> tuple[str, str]:
     """Map a transport exception onto ``(failure_reason, message)``."""
+    exc = _unwrap(exc)  # type: ignore[assignment]
     if isinstance(exc, _RedirectToBlockedAddress):
         return FailureReason.BLOCKED_TARGET.value, str(exc)
     if isinstance(exc, httpx.ConnectTimeout):

@@ -12,7 +12,12 @@ import pytest
 import respx
 
 from app.core.enums import CheckStatus, FailureReason
-from app.monitoring.checker import CheckTarget, resolve_host, run_check
+from app.monitoring.checker import (
+    _MAX_BODY_PEEK_BYTES,
+    CheckTarget,
+    resolve_host,
+    run_check,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -61,8 +66,21 @@ class TestHealthyEndpoint:
         assert outcome.is_up is True
 
     @respx.mock
-    async def test_records_content_length_but_not_the_body(self):
-        """Monitoring must not become a data-exfiltration path."""
+    async def test_records_the_full_length_but_keeps_only_a_bounded_head(self):
+        """The body is held, deliberately, but never unboundedly.
+
+        This used to assert the outcome carried no body at all. That stopped
+        being true when captures were added: the response has to be streamed
+        to measure it, so the first 64 KB is kept rather than thrown away -
+        the expected-substring match reads it, and so does the capture that
+        lets someone see the actual 502 page afterwards.
+
+        What still has to hold is the bound. `content_length` is the real
+        size; `body_head` is capped at `_MAX_BODY_PEEK_BYTES` however large
+        the response, so a 2 GB body costs 64 KB here. Only the capture row
+        persists it, and only after `capture_service.decode_body` has vetted
+        the content type and stripped what PostgreSQL cannot store.
+        """
         respx.get("https://api.example.com/health").mock(
             return_value=httpx.Response(200, text="secret-payload-contents")
         )
@@ -70,9 +88,20 @@ class TestHealthyEndpoint:
         outcome = await run_check(target())
 
         assert outcome.content_length == len(b"secret-payload-contents")
-        # The outcome object has no field that could carry the body.
-        assert not hasattr(outcome, "body")
-        assert "secret-payload" not in str(outcome.__dict__)
+        assert outcome.body_head == b"secret-payload-contents"
+        assert outcome.body_truncated is False
+
+    @respx.mock
+    async def test_a_large_body_is_truncated_to_the_peek_bound(self):
+        respx.get("https://api.example.com/health").mock(
+            return_value=httpx.Response(200, text="x" * (_MAX_BODY_PEEK_BYTES + 5_000))
+        )
+
+        outcome = await run_check(target())
+
+        assert outcome.content_length == _MAX_BODY_PEEK_BYTES + 5_000
+        assert len(outcome.body_head) == _MAX_BODY_PEEK_BYTES
+        assert outcome.body_truncated is True
 
     @respx.mock
     async def test_captures_only_interesting_response_headers(self):
@@ -404,6 +433,13 @@ class TestRedirects:
         The original URL is fine and passes the up-front DNS/policy check;
         the danger is a 3xx pointing somewhere that check never saw.
         """
+        # conftest sets ALLOW_LOOPBACK_TARGETS=true for the whole suite, so
+        # other tests can point a check at a local server. That setting is
+        # exactly what this one is testing the absence of - left on, the guard
+        # correctly permits 127.0.0.1 and the test silently proves nothing.
+        from app.core.config import settings
+
+        monkeypatch.setattr(settings, "ALLOW_LOOPBACK_TARGETS", False)
 
         async def _resolve(hostname, port, *, timeout):
             if hostname == "internal.example.com":

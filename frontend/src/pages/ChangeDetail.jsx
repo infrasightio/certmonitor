@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
+  AlertTriangle,
   ArrowLeft,
   Ban,
+  CalendarClock,
   CheckCircle2,
   MessageSquare,
   Pencil,
@@ -130,6 +132,8 @@ export default function ChangeDetail() {
   }
 
   const deploying = change.status === 'deployment_in_progress'
+  const blockers = change.submission_blockers ?? []
+  const conflicts = change.conflicts ?? []
 
   return (
     <>
@@ -162,6 +166,7 @@ export default function ChangeDetail() {
               <button
                 type="button"
                 className="btn-primary"
+                title={blockers.length ? blockers.join('; ') : undefined}
                 onClick={() =>
                   run(
                     () => changesApi.submit(change.id),
@@ -170,7 +175,7 @@ export default function ChangeDetail() {
                       : 'Approved — this environment does not require approval.',
                   )
                 }
-                disabled={busy}
+                disabled={busy || blockers.length > 0}
               >
                 {busy ? <Spinner size={15} className="text-white" /> : <Send size={15} />}
                 Submit
@@ -284,6 +289,52 @@ export default function ChangeDetail() {
           </p>
         ) : null}
       </div>
+
+      {/* ------------------------------------------- submission blockers */}
+      {blockers.length > 0 ? (
+        <div className="card mb-4 border-l-4 border-l-amber-500 p-4">
+          <p className="flex items-center gap-2 text-sm font-medium text-amber-800 dark:text-amber-300">
+            <AlertTriangle size={15} /> This change cannot be submitted yet
+          </p>
+          <ul className="mt-2 list-disc space-y-1 pl-6 text-sm text-slate-600 dark:text-slate-300">
+            {blockers.map((reason) => (
+              <li key={reason}>{reason}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {/* ------------------------------------------- scheduling conflicts */}
+      {conflicts.length > 0 ? (
+        <div className="card mb-4 border-l-4 border-l-amber-500 p-4">
+          <p className="flex items-center gap-2 text-sm font-medium text-amber-800 dark:text-amber-300">
+            <CalendarClock size={15} /> {conflicts.length} other change
+            {conflicts.length === 1 ? '' : 's'} planned for an overlapping window
+          </p>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            Advisory only — overlapping windows are sometimes deliberate.
+          </p>
+          <ul className="mt-2 space-y-2">
+            {conflicts.map((conflict) => (
+              <li key={conflict.id} className="text-sm">
+                <Link
+                  to={`/changes/${conflict.id}`}
+                  className="font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+                >
+                  {conflict.reference}
+                </Link>{' '}
+                <span className="text-slate-700 dark:text-slate-200">
+                  {conflict.title}
+                </span>
+                <span className="block text-xs text-slate-500 dark:text-slate-400">
+                  {formatDateTime(conflict.expected_start_at)} ·{' '}
+                  {conflict.expected_duration_minutes} min · {conflict.reason}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         {/* --------------------------------------------------- left */}

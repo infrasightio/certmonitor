@@ -379,9 +379,9 @@ async def create_endpoint(
         auth_type=auth_type,
         auth_username=_trim(payload.get("auth_username"), 128),
         auth_header_name=_trim(payload.get("auth_header_name"), 128),
-        failure_threshold=int(
-            payload.get("failure_threshold") or config.get("failure_threshold", 3)
-        ),
+        # None means inherit; resolving the global here would freeze today's
+        # setting onto the row and make later changes to it a no-op.
+        failure_threshold=_as_int(payload.get("failure_threshold")),
         response_time_threshold_ms=_as_int(payload.get("response_time_threshold_ms")),
         ssl_warning_days=_as_int(payload.get("ssl_warning_days")),
         ssl_critical_days=_as_int(payload.get("ssl_critical_days")),
@@ -544,10 +544,9 @@ async def update_endpoint(
         "ssl_critical_days",
     ):
         if field in payload:
-            endpoint_value = _as_int(payload[field])
-            if field == "failure_threshold" and endpoint_value is None:
-                endpoint_value = int(config.get("failure_threshold", 3))
-            setattr(endpoint, field, endpoint_value)
+            # Clearing any of these is how an operator opts back in to the
+            # environment or global value.
+            setattr(endpoint, field, _as_int(payload[field]))
 
     if "custom_headers" in payload:
         endpoint.custom_headers = validate_custom_headers(payload["custom_headers"])

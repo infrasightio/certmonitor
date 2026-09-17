@@ -904,56 +904,66 @@ def export_ssl_excel(rows: Sequence[tuple[Any, Any]]) -> bytes:
 
 
 def csv_template() -> bytes:
-    """A ready-to-fill template with one example row."""
+    """A ready-to-fill template with two example rows.
+
+    The rows carry one value per entry in ``CSV_TEMPLATE_COLUMNS`` and are
+    written from that list rather than typed out, so a column added later
+    cannot silently shift every value after it into the wrong field.
+    """
+    examples: list[dict[str, str]] = [
+        {
+            "name": "Checkout API",
+            "url": "https://api.example.com/health",
+            "environment": "production",
+            "tags": "backend,critical",
+            "interval": "60",
+            "timeout": "10",
+            "description": "Checkout backend health probe",
+            "owner": "platform@example.com",
+            "owner_name": "Platform Team",
+            "team": "Platform",
+            "application": "Checkout",
+            "master_node_ip": "10.0.0.11",
+            "method": "GET",
+            "expected_status": "200",
+            "check_type": "http",
+            "monitoring_enabled": "yes",
+            "ssl_monitoring": "yes",
+            "verify_ssl": "yes",
+            "follow_redirects": "yes",
+            "failure_threshold": "3",
+            "response_time_threshold_ms": "2000",
+        },
+        {
+            "name": "Customer Portal",
+            "url": "https://portal.example.com",
+            "environment": "production",
+            "tags": "frontend",
+            "interval": "60",
+            "timeout": "10",
+            "description": "Main portal",
+            "owner": "web@example.com",
+            "owner_name": "Web Team",
+            "team": "Web",
+            "application": "Portal",
+            "method": "GET",
+            "expected_status": "200,301",
+            "check_type": "http",
+            "monitoring_enabled": "yes",
+            "ssl_monitoring": "yes",
+            "verify_ssl": "yes",
+            "follow_redirects": "yes",
+            "failure_threshold": "3",
+        },
+    ]
+
     buffer = io.StringIO(newline="")
     writer = csv.writer(buffer, lineterminator="\r\n")
     writer.writerow(CSV_TEMPLATE_COLUMNS)
-    writer.writerow(
-        [
-            "Translation API",
-            "https://api.example.com/health",
-            "production",
-            "backend,critical",
-            "60",
-            "10",
-            "Translation backend health probe",
-            "platform@example.com",
-            "Platform",
-            "Bhashini",
-            "GET",
-            "200",
-            "http",
-            "yes",
-            "yes",
-            "yes",
-            "yes",
-            "3",
-            "2000",
-        ]
-    )
-    writer.writerow(
-        [
-            "Portal",
-            "https://portal.example.com",
-            "production",
-            "frontend",
-            "60",
-            "10",
-            "Main portal",
-            "web@example.com",
-            "Web",
-            "Portal",
-            "GET",
-            "200,301",
-            "http",
-            "yes",
-            "yes",
-            "yes",
-            "yes",
-            "3",
-            "",
-        ]
-    )
+    for example in examples:
+        writer.writerow(
+            [example.get(column, "") for column in CSV_TEMPLATE_COLUMNS]
+        )
     return b"\xef\xbb\xbf" + buffer.getvalue().encode("utf-8")
 
 

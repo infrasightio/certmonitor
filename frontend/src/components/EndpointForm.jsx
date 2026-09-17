@@ -674,7 +674,7 @@ export default function EndpointForm({ open, onClose, onSaved, endpoint, filters
             <Field
               label="Warning threshold (days)"
               error={errors.ssl_warning_days}
-              hint="Leave blank to use the global setting."
+              hint="Leave blank to inherit from the environment, or the global setting."
             >
               <input
                 type="number"

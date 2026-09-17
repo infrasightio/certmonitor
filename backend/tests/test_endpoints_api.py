@@ -63,7 +63,11 @@ class TestCreate:
         assert body["interval_seconds"] == 60
         assert body["timeout_seconds"] == 5
         assert body["expected_status_codes"] == "200"
-        assert body["failure_threshold"] == 3
+        # `failure_threshold` is the endpoint's own override and stays null
+        # when none was given - that null is what lets the environment or the
+        # global setting apply. The resolved value is reported separately.
+        assert body["failure_threshold"] is None
+        assert body["effective_failure_threshold"] == 3
 
     async def test_aggressive_interval_is_clamped(self, client, admin_headers):
         """The floor is enforced server-side, not trusted from the client."""
@@ -628,9 +632,13 @@ class TestBulkActions:
             json={
                 "endpoint_ids": ["00000000-0000-0000-0000-000000000000"],
                 "action": "pause",
+                # Required for pause and disable, in bulk as for one endpoint.
+                # Without it this 422s before reaching what the test is about.
+                "pause_reason": "Testing unknown ids",
             },
             headers=admin_headers,
         )
+        assert response.status_code == 200, response.text
         body = response.json()
         assert body["failed"] == 1
         assert body["errors"][0]["error"] == "not found"

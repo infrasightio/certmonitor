@@ -92,7 +92,18 @@ DOCS.page({
       {
         label: 'Thresholds',
         html:
-          `<p>Every one of these is nullable, and null means <em>inherit</em>.</p>` +
+          `<p>Every one of these is nullable, and null means <em>inherit</em>. The read payload
+          also reports the resolved value as
+          <code>effective_&lt;field&gt;</code>, so a screen can show the number in force while an
+          edit form still binds to the override &mdash; prefilling the inherited value and saving it
+          back would silently pin it.</p>
+
+          <p><strong>Before 0018</strong> this was true of three of the four.
+          <code>failure_threshold</code> was NOT NULL with a default, and endpoint creation resolved
+          the global setting onto the row, so resolution always stopped at the first tier and an
+          environment-level or global failure threshold could never apply. Migration 0018 drops the
+          NOT NULL. Existing rows keep the explicit value they already carry, so no deployment's
+          alerting shifts on upgrade &mdash; clearing the field is how an endpoint opts in.</p>` +
           DOCS.table(['Field', 'Range', 'Falls back to'], [
             ['<code>failure_threshold</code>', '1&ndash;20',
              'Environment override, then the <code>failure_threshold</code> setting, then 3'],

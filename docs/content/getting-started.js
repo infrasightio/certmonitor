@@ -48,8 +48,9 @@ DOCS.page({
        'A strong password. Compose refuses to start without it &mdash; the variable is declared ' +
        '<code>:?POSTGRES_PASSWORD must be set in .env</code>.'],
       ['<code>JWT_SECRET</code>',
-       'At least 32 random characters. <code>openssl rand -hex 32</code>. Changing it later ' +
-       'invalidates every existing session.'],
+       'At least 32 random characters. <code>openssl rand -base64 48</code>. Not optional once ' +
+       '<code>APP_ENV</code> is <code>production</code> or <code>staging</code>: the API refuses ' +
+       'to start without it. Changing it later invalidates every existing session.'],
       ['<code>ENCRYPTION_KEY</code>',
        'Optional but recommended. Leave blank and it is derived from <code>JWT_SECRET</code>, which ' +
        'means rotating <code>JWT_SECRET</code> would make every stored endpoint credential and ' +
@@ -80,7 +81,7 @@ docker compose logs -f backend`, 'shell'),
         |
         +--> wait_for_database    poll SELECT 1, up to DB_WAIT_ATTEMPTS (60) x DB_WAIT_DELAY (2s)
         |
-        +--> alembic upgrade head          apply migrations 0001 .. 0017
+        +--> alembic upgrade head          apply migrations 0001 .. 0018
         |
         +--> python -m app.bootstrap       seed, once, before uvicorn forks
         |         |
@@ -235,6 +236,9 @@ pytest tests/test_checker.py -v`, 'shell') +
             '<code>JSONB</code> on PostgreSQL and plain <code>JSON</code> elsewhere, and ' +
             '<code>BigIntType</code> is <code>BIGINT</code> on PostgreSQL and <code>INTEGER</code> ' +
             'on SQLite, because SQLite has no autoincrementing <code>BIGINT</code>. ' +
+            '<code>TimestampTZ</code> is a <code>TypeDecorator</code> that re-attaches UTC on ' +
+            'load, because SQLite ignores <code>timezone=True</code> and would otherwise hand ' +
+            'back naive datetimes that the application cannot subtract. ' +
             '<code>asyncio_mode = auto</code> in <code>pytest.ini</code> keeps the async tests free ' +
             'of decorators.</p>')
       }

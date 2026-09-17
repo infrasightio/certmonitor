@@ -472,7 +472,6 @@ export default function EndpointDetail() {
   }
 
   const windows = stats?.windows || {}
-  const current = windows[window_] || {}
 
   return (
     <>
@@ -805,7 +804,7 @@ export default function EndpointDetail() {
                 label="Consecutive failures"
                 value={formatNumber(endpoint.consecutive_failures)}
                 tone={endpoint.consecutive_failures > 0 ? 'bad' : 'good'}
-                sub={`opens an incident at ${endpoint.failure_threshold}`}
+                sub={`opens an incident at ${endpoint.effective_failure_threshold ?? endpoint.failure_threshold}`}
               />
               <Metric
                 label="Created"
@@ -1122,11 +1121,11 @@ export default function EndpointDetail() {
               ) : null}
 
               <p className="mt-3 text-xs text-slate-400">
-                Resolved just now through this server's resolver, and reverse
+                Resolved just now through this server&rsquo;s resolver, and reverse
                 lookups are best-effort — an internal zone often has no PTR
                 record. No geolocation: a private address has no region, and
                 finding one for a public address would mean sending your
-                infrastructure's addresses to a third party.
+                infrastructure&rsquo;s addresses to a third party.
               </p>
             </>
           )}
@@ -1368,7 +1367,7 @@ export default function EndpointDetail() {
               )}
             </DetailRow>
             <DetailRow label="Failure threshold">
-              {endpoint.failure_threshold} consecutive failures
+              {endpoint.effective_failure_threshold ?? endpoint.failure_threshold} consecutive failures
             </DetailRow>
             <DetailRow label="Response time threshold">
               {endpoint.response_time_threshold_ms

@@ -54,15 +54,39 @@ CanComment = Annotated[User, Depends(require_permissions(Permission.CHANGE_COMME
 
 # ----------------------------------------------------------------- helpers
 async def _load(session, change_id: int, *, detail: bool = True) -> Change:
+    """Read a change, always from the database.
+
+    `populate_existing` matters because the sessions are built with
+    `expire_on_commit=False`. Every mutating route commits and then re-loads to
+    build its response; without this, the identity map hands back the instance
+    it already had and `selectinload` leaves its stale collections alone. The
+    visible symptom was `POST /changes/{id}/comments` returning 201 with a
+    `comments` list that did not contain the comment just posted.
+    """
     stmt = (
-        change_service.detail_query() if detail else change_service.base_query()
-    ).where(Change.id == change_id)
+        (change_service.detail_query() if detail else change_service.base_query())
+        .where(Change.id == change_id)
+        .execution_options(populate_existing=True)
+    )
     change = (await session.execute(stmt)).scalars().unique().one_or_none()
     if change is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Change not found."
         )
     return change
+
+
+def _owns_or_admin(change: Change, user: User) -> bool:
+    """Whether this user may act on this change at all, ignoring its status.
+
+    Kept separate from the `can_*` flags below: those answer "should the UI
+    offer this button", which folds status in. A route needs the two apart, so
+    that "you are not allowed" (403) and "not from this status" (400) are
+    different answers.
+    """
+    return (
+        change.requester_id == user.id or user.role_name == RoleName.ADMIN.value
+    )
 
 
 def _permissions(change: Change, user: User, config: dict) -> dict[str, bool]:
@@ -105,8 +129,20 @@ def _permissions(change: Change, user: User, config: dict) -> dict[str, bool]:
     }
 
 
-def _read(change: Change, user: User, config: dict) -> ChangeRead:
-    return to_read(change, permissions=_permissions(change, user, config))
+async def _read(
+    session, change: Change, user: User, config: dict
+) -> ChangeRead:
+    """Build the detail payload, including the two advisory lists.
+
+    The conflict scan is one bounded, indexed query and only ever runs for a
+    single change, so it stays on the detail route and out of the listing.
+    """
+    return to_read(
+        change,
+        permissions=_permissions(change, user, config),
+        submission_blockers=change_service.submission_blockers(change, config),
+        conflicts=await change_service.scheduling_conflicts(session, change),
+    )
 
 
 def _bad(exc: Exception) -> HTTPException:
@@ -249,14 +285,14 @@ async def create_change(
     )
     await session.commit()
     change = await _load(session, change.id)
-    return _read(change, user, config)
+    return await _read(session, change, user, config)
 
 
 @router.get("/{change_id}", response_model=ChangeRead, summary="Change details")
 async def get_change(
     change_id: int, session: DbSession, user: CanRead, config: RuntimeConfig
 ) -> ChangeRead:
-    return _read(await _load(session, change_id), user, config)
+    return await _read(session, await _load(session, change_id), user, config)
 
 
 @router.put("/{change_id}", response_model=ChangeRead, summary="Edit a change")
@@ -269,14 +305,14 @@ async def update_change(
     config: RuntimeConfig,
 ) -> ChangeRead:
     change = await _load(session, change_id)
-    rights = _permissions(change, user, config)
-    if not rights["can_edit"]:
+    # Authorisation only. `can_edit` also folds in the status, and gating on
+    # the whole thing told an administrator editing a completed change that
+    # they lacked permission - which is both wrong and unactionable. The
+    # status is the service's to rule on, and it answers 400.
+    if not _owns_or_admin(change, user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=(
-                "Only the requester or an administrator can edit this change, "
-                "and only before it is approved."
-            ),
+            detail="Only the requester or an administrator can edit this change.",
         )
     try:
         await change_service.update_change(
@@ -292,7 +328,7 @@ async def update_change(
         resource_name=change.reference, request=request,
     )
     await session.commit()
-    return _read(await _load(session, change_id), user, config)
+    return await _read(session, await _load(session, change_id), user, config)
 
 
 # --------------------------------------------------------------- workflow
@@ -333,7 +369,7 @@ async def submit_change(
         details={"resulting_status": change.status}, request=request,
     )
     await session.commit()
-    return _read(await _load(session, change_id), user, config)
+    return await _read(session, await _load(session, change_id), user, config)
 
 
 @router.post(
@@ -341,20 +377,21 @@ async def submit_change(
 )
 async def approve_change(
     change_id: int,
-    payload: ApprovalRequest,
     user: CanApprove,
     request: Request,
     session: DbSession,
     config: RuntimeConfig,
+    # Optional: every field on ApprovalRequest is, so requiring the body just
+    # to carry an absent comment made `POST .../approve` with no body a 422.
+    payload: ApprovalRequest | None = None,
 ) -> ChangeRead:
     change = await _load(session, change_id)
+    comment = payload.comment if payload else None
     try:
-        await change_service.approve(
-            session, change, user=user, comment=payload.comment
-        )
-        if payload.comment:
+        await change_service.approve(session, change, user=user, comment=comment)
+        if comment:
             await change_service.add_comment(
-                session, change, user=user, body=payload.comment
+                session, change, user=user, body=comment
             )
     except ChangeError as exc:
         raise _bad(exc) from exc
@@ -366,7 +403,7 @@ async def approve_change(
         resource_name=change.reference, request=request,
     )
     await session.commit()
-    return _read(await _load(session, change_id), user, config)
+    return await _read(session, await _load(session, change_id), user, config)
 
 
 @router.post(
@@ -397,7 +434,7 @@ async def reject_change(
         details={"reason": payload.reason}, request=request,
     )
     await session.commit()
-    return _read(await _load(session, change_id), user, config)
+    return await _read(session, await _load(session, change_id), user, config)
 
 
 @router.post(
@@ -405,21 +442,26 @@ async def reject_change(
 )
 async def cancel_change(
     change_id: int,
-    payload: CancelRequest,
     user: CanWrite,
     request: Request,
     session: DbSession,
     config: RuntimeConfig,
+    # Optional: a cancellation reason is welcome but never required.
+    payload: CancelRequest | None = None,
 ) -> ChangeRead:
     change = await _load(session, change_id)
-    if not _permissions(change, user, config)["can_cancel"]:
+    # Authorisation only; `change_service.cancel` rules on the status and
+    # explains itself far better than a blanket 403 does - "a deployment in
+    # progress cannot be cancelled - complete it or mark it failed so
+    # monitoring resumes" is an instruction, not just a refusal.
+    if not _owns_or_admin(change, user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only the requester or an administrator can cancel this change.",
         )
     try:
         await change_service.cancel(
-            session, change, user=user, reason=payload.reason
+            session, change, user=user, reason=payload.reason if payload else None
         )
     except ChangeError as exc:
         raise _bad(exc) from exc
@@ -431,7 +473,7 @@ async def cancel_change(
         resource_name=change.reference, request=request,
     )
     await session.commit()
-    return _read(await _load(session, change_id), user, config)
+    return await _read(session, await _load(session, change_id), user, config)
 
 
 # ------------------------------------------------------------- deployment
@@ -491,7 +533,7 @@ async def start_deployment(
 
     reloaded = await _load(session, change_id)
     return DeploymentResult(
-        change=_read(reloaded, user, config), monitoring_paused=paused
+        change=await _read(session, reloaded, user, config), monitoring_paused=paused
     )
 
 
@@ -502,11 +544,12 @@ async def start_deployment(
 )
 async def complete_deployment(
     change_id: int,
-    payload: CompleteDeploymentRequest,
     user: CanDeploy,
     request: Request,
     session: DbSession,
     config: RuntimeConfig,
+    # Optional: deployment notes are the only field, and they are optional.
+    payload: CompleteDeploymentRequest | None = None,
 ) -> DeploymentResult:
     """Finish a deployment.
 
@@ -526,7 +569,7 @@ async def complete_deployment(
     try:
         result = await change_service.complete_deployment(
             session, change, user=user, config=config,
-            notes=payload.deployment_notes,
+            notes=payload.deployment_notes if payload else None,
         )
     except ChangeError as exc:
         raise _bad(exc) from exc
@@ -549,7 +592,7 @@ async def complete_deployment(
 
     reloaded = await _load(session, change_id)
     return DeploymentResult(
-        change=_read(reloaded, user, config),
+        change=await _read(session, reloaded, user, config),
         monitoring_resumed=result["resumed"],
         health_check=result["health_check"],
     )
@@ -606,7 +649,7 @@ async def fail_deployment(
 
     reloaded = await _load(session, change_id)
     return DeploymentResult(
-        change=_read(reloaded, user, config),
+        change=await _read(session, reloaded, user, config),
         monitoring_resumed=result["resumed"],
         health_check=result["health_check"],
     )
@@ -643,4 +686,4 @@ async def add_comment(
         resource_name=change.reference, request=request,
     )
     await session.commit()
-    return _read(await _load(session, change_id), user, config)
+    return await _read(session, await _load(session, change_id), user, config)

@@ -4,10 +4,11 @@ DOCS.page({
   description: 'No manifests ship with the repository. What does ship is an application designed for a cluster - here is what it assumes, and what a chart has to get right.',
   body: [
 
-    DOCS.callout('warn', 'Status: no manifests, no Helm chart, no CI/CD in this repository',
-      '<p>The repository contains <code>docker-compose.yml</code> and two Dockerfiles. There is no ' +
-      '<code>k8s/</code> directory, no <code>Chart.yaml</code>, no ' +
-      '<code>.github/workflows</code>, no <code>.gitlab-ci.yml</code> and no ' +
+    DOCS.callout('warn', 'Status: no manifests and no Helm chart in this repository',
+      '<p>The repository contains <code>docker-compose.yml</code>, two Dockerfiles and a CI ' +
+      'workflow at <code>.github/workflows/ci.yml</code> that tests, lints and builds both ' +
+      'images. It does <strong>not</strong> deploy: there is no <code>k8s/</code> directory, no ' +
+      '<code>Chart.yaml</code>, no <code>.gitlab-ci.yml</code> and no ' +
       '<code>Jenkinsfile</code>. Everything below is derived from what the application actually ' +
       'does &mdash; its probes, its identity model, its locking and its shutdown behaviour &mdash; ' +
       'plus the design notes the maintainers left in the README. Treat it as the specification a ' +
@@ -127,8 +128,10 @@ livenessProbe:
 
     DOCS.table(['Secret', 'Consequence of getting it wrong'], [
       ['<code>JWT_SECRET</code>',
-       'Rotating it invalidates every session <em>and</em>, unless <code>ENCRYPTION_KEY</code> is set ' +
-       'separately, makes every stored credential undecryptable'],
+       'Mandatory: with <code>APP_ENV=production</code> the pod exits at startup without it, which ' +
+       'is deliberate &mdash; a generated secret differs per replica, so tokens would fail at ' +
+       'random. Rotating it invalidates every session <em>and</em>, unless ' +
+       '<code>ENCRYPTION_KEY</code> is set separately, makes every stored credential undecryptable'],
       ['<code>ENCRYPTION_KEY</code>',
        'Set it explicitly in a cluster. Deriving it from <code>JWT_SECRET</code> couples two ' +
        'rotations that should be independent.'],

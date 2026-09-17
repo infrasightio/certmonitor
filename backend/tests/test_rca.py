@@ -128,9 +128,14 @@ class TestOptionality:
         assert response.status_code == 200
         assert response.json()["status"] == "completed"
 
+        # Read the id before expiring. Afterwards, touching any attribute on
+        # the expired instance triggers a lazy refresh, and a lazy refresh from
+        # this synchronous expression raises MissingGreenlet rather than
+        # loading anything.
+        incident_id = incident.id
         session.expire_all()
         row = (
-            await session.execute(select(Incident).where(Incident.id == incident.id))
+            await session.execute(select(Incident).where(Incident.id == incident_id))
         ).scalars().unique().one()
         assert row.status == "resolved"
 

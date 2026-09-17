@@ -45,6 +45,11 @@ curl -s http://localhost:8080/health | jq`, 'shell'),
          'Seeding failed. This is deliberately fatal for the container &mdash; better than serving an ' +
          'API with no admin account.',
          'Usually a permissions problem on the database role.'],
+        ['<code>ValueError: JWT_SECRET is not set&hellip;</code>',
+         'Configuration validation rejected a production or staging environment that supplied no ' +
+         'signing secret',
+         'Set <code>JWT_SECRET</code> in <code>.env</code> &mdash; <code>openssl rand -base64 48' +
+         '</code>. See below; this refusal is deliberate.'],
         ['<code>ValueError: MIN_MONITOR_INTERVAL must be &gt;= 10 seconds</code>',
          'Configuration validation rejected the environment',
          'Fix the value in <code>.env</code>.'],
@@ -52,6 +57,31 @@ curl -s http://localhost:8080/health | jq`, 'shell'),
          'Same, for the certificate thresholds',
          'Make critical the smaller number.']
       ])),
+
+    DOCS.details('JWT_SECRET is not set — and the API will not start',
+      `<p>Only in <code>production</code> and <code>staging</code>. Elsewhere a secret is generated,
+      startup logs <code>generated_jwt_secret</code>, and the container comes up.</p>
+
+      <p>The refusal looks unhelpful until you see what the alternative costs. A generated secret is
+      64 characters and passes every strength check, but it belongs to one process:</p>
+
+      <ul>
+        <li>Two API replicas sign with different keys, so a token minted by one is rejected by the
+        other. Sign-ins appear to work and then fail at random.</li>
+        <li>Every restart invalidates every session.</li>
+        <li><code>ENCRYPTION_KEY</code> falls back to it, so every stored endpoint credential and
+        notification-channel secret becomes <strong>permanently unreadable</strong> the moment the
+        process restarts. Nothing looks wrong until then, and by then the plaintext is gone.</li>
+      </ul>
+
+      <p>None of that is detectable from the secret itself, which is why the check is for whether it
+      was supplied at all rather than how strong it is.</p>` +
+      DOCS.code(`# in .env
+JWT_SECRET=$(openssl rand -base64 48)
+# and, so the two can rotate independently:
+ENCRYPTION_KEY=$(openssl rand -base64 48)`, 'shell') +
+      `<p>If credentials were already saved against a generated secret, they cannot be recovered.
+      Re-enter them once a real secret is in place.</p>`),
 
     DOCS.details('POSTGRES_PASSWORD must be set in .env',
       `<p>Compose refuses to start at all. The variable is declared with the

@@ -292,6 +292,25 @@ def requires_approval(change: Change, config: dict[str, Any]) -> bool:
     return (change.environment_name or "").lower() in required
 
 
+def submission_blockers(change: Change, config: dict[str, Any]) -> list[str]:
+    """Why this change cannot be submitted yet, in words a requester can act on.
+
+    Computed rather than validated at creation time so a half-written change
+    can still be saved as a draft - the rule bites at the point where the
+    change stops being the requester's private working copy.
+    """
+    blockers: list[str] = []
+    if (
+        change.risk == ChangeRisk.HIGH.value
+        and config.get("change_require_rollback_plan_for_high_risk", True)
+        and not (change.rollback_plan or "").strip()
+    ):
+        blockers.append(
+            "a high-risk change needs a rollback plan before it can be submitted"
+        )
+    return blockers
+
+
 async def submit(
     session: AsyncSession, change: Change, *, user: User, config: dict[str, Any]
 ) -> Change:
@@ -299,6 +318,10 @@ async def submit(
     environment does not require it."""
     if change.status != ChangeStatus.DRAFT.value:
         raise ChangeError(f"only a draft can be submitted (this one is '{change.status}')")
+
+    blockers = submission_blockers(change, config)
+    if blockers:
+        raise ChangeError("; ".join(blockers))
 
     if requires_approval(change, config):
         change.status = ChangeStatus.PENDING_APPROVAL.value
@@ -394,6 +417,141 @@ async def cancel(
         user=user,
     )
     return change
+
+
+# ------------------------------------------------------------- conflicts
+# Changes are planned, not just deployed, so two of them can be scheduled to
+# touch the same thing at the same time long before either starts. The window
+# is derived from the two fields a change already carries - expected_start_at
+# and expected_duration_minutes - so no new data is required to spot it.
+#
+# A conflict is never a hard block. Overlapping windows are sometimes exactly
+# what a team intends (two changes to the same application, deliberately
+# batched into one outage), and a rule that refused them would just be worked
+# around. It is surfaced on the change and named at submission instead.
+CONFLICT_SCAN_LIMIT = 50
+
+# The widest window a change can have, from ChangeCreate.expected_duration_
+# minutes (le=1440). Used to bound the candidate scan: a change starting more
+# than this long before ours cannot still be running when ours begins.
+MAX_CHANGE_DURATION_MINUTES = 1440
+
+# States that still represent an intention to deploy. A rejected, cancelled,
+# completed or failed change is not competing for anything.
+PLANNED_CHANGE_STATUSES = (
+    ChangeStatus.DRAFT.value,
+    ChangeStatus.PENDING_APPROVAL.value,
+    ChangeStatus.APPROVED.value,
+    ChangeStatus.DEPLOYMENT_IN_PROGRESS.value,
+)
+
+
+def _window(change: Change) -> tuple[datetime, datetime]:
+    """The period a change expects to occupy.
+
+    A deployment already under way is measured from when it actually started,
+    which is the honest answer once the plan and reality have diverged.
+    """
+    start = change.started_at or change.expected_start_at
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=timezone.utc)
+    return start, start + timedelta(minutes=max(1, change.expected_duration_minutes))
+
+
+async def scheduling_conflicts(
+    session: AsyncSession, change: Change
+) -> list[dict[str, Any]]:
+    """Other planned changes whose window overlaps this one's.
+
+    Two reasons count, and both come from data InfraSight already holds:
+
+    * **same application and environment** - the case in the brief, where two
+      teams book the same production service for overlapping hours;
+    * **shared endpoints** - a stronger signal than the first, because those
+      two changes will fight over the same monitoring pause regardless of what
+      application they claim to be.
+
+    Nothing is inferred about service dependencies: InfraSight does not know
+    which application calls which, so it does not guess.
+    """
+    if change.status in TERMINAL_CHANGE_STATUSES:
+        return []
+
+    start, end = _window(change)
+
+    # Bounded by the widest window any change can have, so the scan uses
+    # ix_changes_expected_start instead of reading the table.
+    earliest = start - timedelta(minutes=MAX_CHANGE_DURATION_MINUTES)
+    candidates = (
+        (
+            await session.execute(
+                base_query()
+                .where(
+                    Change.id != change.id,
+                    Change.status.in_(PLANNED_CHANGE_STATUSES),
+                    Change.expected_start_at >= earliest,
+                    Change.expected_start_at < end,
+                )
+                .order_by(Change.expected_start_at)
+                .limit(CONFLICT_SCAN_LIMIT)
+            )
+        )
+        .scalars()
+        .unique()
+        .all()
+    )
+
+    our_endpoints = {endpoint.id for endpoint in (change.endpoints or [])}
+    our_application = (change.application or "").strip().lower()
+
+    conflicts: list[dict[str, Any]] = []
+    for other in candidates:
+        other_start, other_end = _window(other)
+        # Half-open intervals: a change ending exactly when the next begins is
+        # a clean handover, not a clash.
+        if not (other_start < end and start < other_end):
+            continue
+
+        shared = sorted(
+            endpoint.name
+            for endpoint in (other.endpoints or [])
+            if endpoint.id in our_endpoints
+        )
+        same_target = (
+            (other.application or "").strip().lower() == our_application
+            and other.environment_id == change.environment_id
+        )
+        if not shared and not same_target:
+            continue
+
+        if shared:
+            reason = (
+                f"shares {len(shared)} endpoint(s) with this change: "
+                + ", ".join(shared[:5])
+                + ("…" if len(shared) > 5 else "")
+            )
+        else:
+            reason = (
+                f"targets the same application and environment "
+                f"({other.application} / {other.environment_name or 'no environment'})"
+            )
+
+        conflicts.append(
+            {
+                "id": other.id,
+                "reference": other.reference,
+                "title": other.title,
+                "status": other.status,
+                "application": other.application,
+                "environment": other.environment_name,
+                "expected_start_at": other_start,
+                "expected_duration_minutes": other.expected_duration_minutes,
+                "shared_endpoints": shared,
+                "reason": reason,
+            }
+        )
+
+    return conflicts
 
 
 # ----------------------------------------------------------- deployment

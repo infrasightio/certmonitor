@@ -152,8 +152,12 @@ backend/app/
     ]),
 
     `<h3>Lifespan</h3>
-    <p>On startup the API logs <code>api_starting</code>, warns if <code>JWT_SECRET</code> is shorter
-    than 32 characters in a production environment, and runs the bootstrap. A bootstrap failure is
+    <p>On startup the API logs <code>api_starting</code> and runs the bootstrap. Configuration is
+    validated before that, and a production or staging environment with no <code>JWT_SECRET</code>
+    is rejected outright rather than started &mdash; a generated secret differs per replica and per
+    restart, which costs every session and every stored credential. Where a secret was generated
+    (development, testing) startup logs <code>generated_jwt_secret</code>; a supplied secret shorter
+    than 32 characters in production logs <code>weak_jwt_secret</code>. A bootstrap failure is
     logged as <code>bootstrap_failed</code> and <em>does not</em> crash the container: <code>/ready</code>
     keeps reporting not-ready, which is the signal an operator needs while migrations catch up. On
     shutdown it closes the rate limiter and disposes the engine.</p>`,

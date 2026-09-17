@@ -159,8 +159,11 @@ class TestIncidentLifecycle:
 
         incidents = (await session.execute(select(Incident))).scalars().all()
         assert len(incidents) == 1
-        # Every failure after the threshold is counted on the same incident.
-        assert incidents[0].failed_check_count == 6
+        # Every failure in the outage belongs to the one incident, including
+        # the two before the threshold was reached. The incident is dated from
+        # the first of them, so counting only from the threshold would leave
+        # its window and its count describing different things.
+        assert incidents[0].failed_check_count == 8
         assert endpoint.consecutive_failures == 8
 
     async def test_recovery_closes_the_incident_and_computes_downtime(

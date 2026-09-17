@@ -174,8 +174,14 @@ class TestSettings:
             json={"name": "After change", "url": "https://after.example.com/h"},
             headers=admin_headers,
         )
-        assert response.json()["interval_seconds"] == 300
-        assert response.json()["failure_threshold"] == 5
+        body = response.json()
+        # The interval is resolved once and stored: it drives scheduling.
+        assert body["interval_seconds"] == 300
+        # The failure threshold is not stored. It stays null and resolves on
+        # read, which is why changing the setting now also moves endpoints
+        # that already exist, instead of only ones created afterwards.
+        assert body["failure_threshold"] is None
+        assert body["effective_failure_threshold"] == 5
 
     async def test_out_of_range_value_is_rejected(self, client, admin_headers):
         response = await client.put(

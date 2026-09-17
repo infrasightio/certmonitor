@@ -126,11 +126,19 @@ class TestStatusCodes:
     def test_normalisation(self, raw, expected):
         assert normalise_status_codes(raw) == expected
 
-    def test_class_shorthand_expands(self):
-        result = normalise_status_codes("2xx")
-        # 100 codes will not fit the column, so this is rejected rather than
-        # silently truncated.
-        assert result is not None or True
+    def test_a_whole_class_is_rejected_rather_than_truncated(self):
+        """`2xx` parses, then cannot be stored - and says so.
+
+        The stored form is a plain list of codes in a `String(128)` column, so
+        a class expands to about 400 characters and does not fit. Truncating
+        would silently widen what counts as healthy, so it is refused.
+
+        This test used to read `assert result is not None or True`, which is
+        true whatever happens - and never ran anyway, because the call above it
+        raises.
+        """
+        with pytest.raises(UrlValidationError, match="too long"):
+            normalise_status_codes("2xx")
 
     @pytest.mark.parametrize("raw", ["abc", "99", "600", "200-100", "12", "2xxx"])
     def test_rejects_invalid(self, raw):

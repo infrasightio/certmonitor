@@ -92,9 +92,25 @@ async def session():
 
 @pytest.fixture
 async def seeded(session):
-    """Roles, permissions, default settings and the admin account."""
+    """Everything first boot creates: roles, permissions, settings,
+    environments and the admin account.
+
+    This delegates to the real bootstrap instead of listing the steps again.
+    It used to reimplement them, and the copy drifted - it never called
+    `seed_environments`, so no environment row existed in any test. Fixtures
+    that looked one up did `next(... for ... if name == "production")`, which
+    raised `StopIteration` inside a coroutine; Python re-raises that as
+    `RuntimeError: coroutine raised StopIteration`, and every test in the
+    class errored during setup rather than failing with anything legible.
+
+    `ensure_roles` and `ensure_default_admin` are idempotent and are called
+    again purely to hand back the objects some tests assert against; `run`
+    has already committed by then, so they only read.
+    """
+    from app import bootstrap
+
+    await bootstrap.run(session)
     roles = await user_service.ensure_roles(session)
-    await settings_service.ensure_seeded(session)
     admin, _ = await user_service.ensure_default_admin(session)
     await session.commit()
     return {"roles": roles, "admin": admin}

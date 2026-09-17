@@ -444,10 +444,20 @@ class EndpointRead(EndpointListItem):
     has_auth_secret: bool = False
     auth_secret_hint: str | None = None
 
-    failure_threshold: int
+    # All four are overrides: null means this endpoint inherits, from its
+    # environment if that sets one, otherwise from the global setting. An edit
+    # form binds to these, so they must stay null when nothing is overridden -
+    # prefilling the inherited number and saving it back would silently pin it.
+    failure_threshold: int | None = None
     response_time_threshold_ms: int | None = None
     ssl_warning_days: int | None = None
     ssl_critical_days: int | None = None
+    # What is actually in force after resolution, for display. Same idea as
+    # `effective_interval_seconds` above.
+    effective_failure_threshold: int | None = None
+    effective_response_time_threshold_ms: int | None = None
+    effective_ssl_warning_days: int | None = None
+    effective_ssl_critical_days: int | None = None
     alerts_enabled: bool
 
     # The last time this endpoint was about to be declared down and was
@@ -629,6 +639,7 @@ def endpoint_to_read(
     created_by: str | None = None,
     updated_by: str | None = None,
     effective_interval_seconds: int | None = None,
+    thresholds: dict[str, int] | None = None,
 ) -> EndpointRead:
     model = EndpointRead.model_validate(endpoint)
     model.has_auth_secret = bool(endpoint.auth_secret_encrypted)
@@ -637,6 +648,15 @@ def endpoint_to_read(
     model.created_by = created_by
     model.updated_by = updated_by
     model.effective_interval_seconds = effective_interval_seconds
+    if thresholds:
+        # From monitoring_service.resolve_thresholds - the same resolution the
+        # checker uses, so what a screen shows is what alerting will do.
+        model.effective_failure_threshold = thresholds.get("failure_threshold")
+        model.effective_response_time_threshold_ms = thresholds.get(
+            "response_time_threshold_ms"
+        )
+        model.effective_ssl_warning_days = thresholds.get("ssl_warning_days")
+        model.effective_ssl_critical_days = thresholds.get("ssl_critical_days")
     return model
 
 

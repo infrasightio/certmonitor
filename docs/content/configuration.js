@@ -113,9 +113,10 @@ DOCS.page({
        'Signs every token, and seeds the encryption key when <code>ENCRYPTION_KEY</code> is unset. ' +
        'At least 32 random characters; a shorter one in production logs ' +
        '<code>weak_jwt_secret</code>. Changing it invalidates every session.',
-       '<strong>Yes</strong> &mdash; a random value is generated as a last resort so a dev container ' +
-       'still boots, which makes tokens invalid on every restart',
-       '<code>openssl rand -hex 32</code>', 'Both'],
+       '<strong>Yes in production and staging &mdash; the API refuses to start without it.</strong> ' +
+       'Elsewhere a value is generated so a dev container still boots, and startup logs ' +
+       '<code>generated_jwt_secret</code>.',
+       '<code>openssl rand -base64 48</code>', 'Both'],
       ['<code>JWT_ALGORITHM</code>', 'Signing algorithm', 'No', '<code>HS256</code>', 'API'],
       ['<code>ACCESS_TOKEN_EXPIRE_MINUTES</code>',
        'Access token lifetime. Overridden at runtime by <code>session_timeout_minutes</code>.',
@@ -405,6 +406,9 @@ DOCS.page({
            'Check the affected endpoints immediately when monitoring resumes'],
           ['<code>change_max_pause_minutes</code>', 'int', '240',
            'Past this, an active deployment is flagged as overrunning'],
+          ['<code>change_require_rollback_plan_for_high_risk</code>', 'bool', 'true',
+           'A high-risk change cannot be submitted without a rollback plan. Drafts can still be ' +
+           'saved without one.'],
           ['<code>rca_reminder_days</code>', 'int', '7',
            'An open RCA older than this is highlighted. Nothing escalates.'],
           ['<code>rca_default_due_days</code>', 'int', '0',

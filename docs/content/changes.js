@@ -95,7 +95,9 @@ DOCS.page({
        'monitoring resumes&rdquo;'],
       ['Marking a deployment failed needs a reason', '&ldquo;a failure reason is required&rdquo;'],
       ['A change can only be edited before approval',
-       '&ldquo;a change in &lsquo;&hellip;&rsquo; can no longer be edited&rdquo;']
+       '&ldquo;a change in &lsquo;&hellip;&rsquo; can no longer be edited&rdquo;'],
+      ['<strong>A high-risk change needs a rollback plan before submission</strong>',
+       '&ldquo;a high-risk change needs a rollback plan before it can be submitted&rdquo;']
     ]),
 
     `<h3>Who may deploy</h3>
@@ -161,6 +163,71 @@ DOCS.page({
       <code>health_check</code> activity entry records &ldquo;<em>n</em> of <em>m</em> endpoint(s)
       healthy&rdquo;.</li>
     </ul>`,
+
+    `<h2>Scheduling conflicts</h2>
+    <p>A change is <em>planned</em> long before it is deployed, so two of them can be booked for
+    overlapping windows on the same target while both are still drafts. Two questions answer that
+    from data a change already carries, so nothing new is stored:</p>
+
+    <ul>
+      <li><strong>Same application and environment.</strong> Two teams booking the same production
+      service for overlapping hours.</li>
+      <li><strong>Shared endpoints.</strong> The stronger signal, because those two changes will
+      fight over the same monitoring pause whatever application they claim to belong to.</li>
+    </ul>`,
+
+    DOCS.diagram(`
+  Change A   Translation API / production   10:00 -> 11:00
+  Change B   Translation API / production   10:30 -> 11:30
+                                            ^^^^^^^^^^^^^^
+  window  = expected_start_at .. + expected_duration_minutes
+            (a deployment already running is measured from started_at,
+             which is the honest answer once plan and reality diverge)
+
+  overlap = other.start < ours.end  AND  ours.start < other.end
+
+  Half-open: a change ending exactly as the next begins is a clean
+  handover, not a clash.
+`, 'Candidates are bounded to changes whose expected_start_at falls within the widest window a change can have (1440 minutes), so the scan uses ix_changes_expected_start rather than reading the table. At most 50 are examined.'),
+
+    `<p>Only changes that still represent an intention to deploy are considered &mdash;
+    <code>draft</code>, <code>pending_approval</code>, <code>approved</code> and
+    <code>deployment_in_progress</code>. A rejected, cancelled, completed or failed change is not
+    competing for anything.</p>
+
+    <p>Conflicts are returned on the change detail payload as <code>conflicts[]</code>, each entry
+    carrying the other change's reference, title, status, window and a <code>reason</code> naming
+    which of the two tests matched. The scan runs on the detail route only, never per row in the
+    listing.</p>`,
+
+    DOCS.callout('note', 'Advisory, never a block',
+      '<p>Overlapping windows are sometimes exactly what a team intends &mdash; two changes to one ' +
+      'application, deliberately batched into a single outage. A rule that refused them would just ' +
+      'be worked around, so nothing in the workflow rejects a conflicting change. It is named on ' +
+      'the change and the team decides.</p>' +
+      '<p>The one genuine block is separate and unchanged: two deployments cannot be ' +
+      '<em>in progress</em> for the same application and environment at once, because they would ' +
+      'fight over the same monitoring pause. That returns <code>409 Conflict</code>.</p>'),
+
+    DOCS.callout('warn', 'What is not detected',
+      '<p>InfraSight does not know which application calls which, so it does not infer dependency ' +
+      'conflicts. A change to a service that another service depends on is not flagged unless the ' +
+      'two changes share an endpoint or name the same application and environment. Endpoint ' +
+      '<em>dependencies</em> exist in the data model and are used by diagnostics, but they are not ' +
+      'consulted here &mdash; that would be a guess dressed up as a finding.</p>'),
+
+    `<h2>High-risk changes</h2>
+    <p>A change marked <code>high</code> risk cannot be submitted until it says how it would be
+    undone. The rule bites at submission rather than creation, because a draft is the requester's
+    working copy and should be savable half-finished.</p>
+
+    <p>The reason is returned on the detail payload as <code>submission_blockers[]</code> before the
+    user tries, so the UI disables Submit and explains why rather than failing on click. The backend
+    enforces it regardless: <code>POST /changes/{id}/submit</code> returns <code>400</code> with
+    &ldquo;a high-risk change needs a rollback plan before it can be submitted&rdquo;. Whitespace is
+    not a plan.</p>
+
+    <p>Turn it off with <code>change_require_rollback_plan_for_high_risk</code> (default on).</p>`,
 
     `<h2>Change records</h2>`,
 

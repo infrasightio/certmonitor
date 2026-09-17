@@ -14,6 +14,10 @@ from typing import Any, Literal
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Marks a JWT_SECRET this process invented rather than read from the
+# environment. Only ever compared against, never shown to a user.
+GENERATED_SECRET_PREFIX = "generated-do-not-use-in-production-"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -63,10 +67,23 @@ class Settings(BaseSettings):
     REDIS_URL: str | None = "redis://redis:6379/0"
 
     # ------------------------------------------------------------- security
-    # JWT_SECRET must be provided in any real deployment; a random value is
-    # generated as a last resort so a dev container still boots (tokens then
-    # become invalid on restart, which is intentional and loud).
-    JWT_SECRET: str = Field(default_factory=lambda: secrets.token_urlsafe(48))
+    # JWT_SECRET must be provided in any real deployment. A random value is
+    # generated as a last resort so a dev container still boots, but the
+    # generated value is prefixed so it can be RECOGNISED later: a generated
+    # secret is fatal in production (see _check_production_hardening) because
+    # it is silently destructive there.
+    #
+    #   - it differs per process, so with two API replicas a token minted by
+    #     one is rejected by the other, at random;
+    #   - it differs per restart, so every session drops on deploy;
+    #   - ENCRYPTION_KEY falls back to it, so every stored endpoint credential
+    #     becomes permanently undecryptable the moment the process restarts.
+    #
+    # Length alone cannot detect this - the generated value is 64 characters
+    # and sails past any minimum - which is why the marker exists.
+    JWT_SECRET: str = Field(
+        default_factory=lambda: GENERATED_SECRET_PREFIX + secrets.token_urlsafe(48)
+    )
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
@@ -201,6 +218,18 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _check_production_hardening(self) -> "Settings":
+        # Refusing to start is the kind outcome. A production instance running
+        # on a generated secret loses every stored endpoint credential on its
+        # next restart, and nothing about the running system looks wrong until
+        # then - by which point the plaintext is gone.
+        if self.is_production and self.jwt_secret_is_generated:
+            raise ValueError(
+                "JWT_SECRET is not set. It is required when APP_ENV is "
+                f"'{self.APP_ENV}': without it every API replica signs tokens "
+                "with a different key, and the credentials encrypted with it "
+                "become unrecoverable on restart. Generate one with "
+                "`openssl rand -base64 48`."
+            )
         if self.MIN_MONITOR_INTERVAL < 10:
             raise ValueError("MIN_MONITOR_INTERVAL must be >= 10 seconds")
         if self.DEFAULT_MONITOR_INTERVAL < self.MIN_MONITOR_INTERVAL:
@@ -252,6 +281,16 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.APP_ENV in ("production", "staging")
+
+    @property
+    def jwt_secret_is_generated(self) -> bool:
+        """Whether JWT_SECRET was invented by this process.
+
+        The distinction matters more than the secret's strength: a generated
+        secret is perfectly strong and completely useless, because no other
+        process - or restart of this one - shares it.
+        """
+        return self.JWT_SECRET.startswith(GENERATED_SECRET_PREFIX)
 
 
 @lru_cache

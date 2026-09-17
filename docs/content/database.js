@@ -225,7 +225,7 @@ DOCS.page({
     ]),
 
     `<h2>Migrations</h2>
-    <p>Alembic, a linear chain of 17 revisions from <code>0001</code> to <code>0017</code>, each
+    <p>Alembic, a linear chain of 18 revisions from <code>0001</code> to <code>0018</code>, each
     naming its predecessor as <code>down_revision</code>. There are no branches and no merge
     revisions.</p>`,
 
@@ -246,8 +246,20 @@ DOCS.page({
       ['<code>0014</code>', 'Re-basing the healthy check cadence on five minutes'],
       ['<code>0015</code>', 'Endpoint captures'],
       ['<code>0016</code>', 'Vantage confirmation'],
-      ['<code>0017</code>', 'Worker region, and vantage status']
+      ['<code>0017</code>', 'Worker region, and vantage status'],
+      ['<code>0018</code>', 'Endpoints can inherit their failure threshold']
     ]),
+
+    DOCS.callout('note', 'Why the history is not squashed',
+      '<p>Seventeen numbered files look like accumulated development debris, and the temptation is ' +
+      'to collapse them into one baseline. They are not debris: every deployed database records ' +
+      'the revision it reached in <code>alembic_version</code>. Replacing the chain with a new ' +
+      'baseline would leave those databases pointing at a revision that no longer exists, and ' +
+      '<code>alembic upgrade head</code> would fail on the next start.</p>' +
+      '<p>A squash is only safe once every database that matters is at <code>head</code> and can ' +
+      'be stamped, which is a deployment operation, not a code cleanup. Until then the linear ' +
+      'chain <em>is</em> the clean structure: one file per change, each naming its predecessor, ' +
+      'no branches, no merge revisions, and a table above that says what each one did.</p>'),
 
     DOCS.callout('note', 'Who runs migrations',
       '<p>Only the <code>api</code> entrypoint role runs <code>alembic upgrade head</code>. The ' +

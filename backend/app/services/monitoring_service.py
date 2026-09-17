@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -245,6 +245,46 @@ def _timeline_entry(kind: str, detail: str, at: datetime) -> dict[str, Any]:
     return {"at": at.isoformat(), "kind": kind, "detail": detail[:500]}
 
 
+async def _outage_started_at(
+    session: AsyncSession, endpoint_id: uuid.UUID, *, fallback: datetime
+) -> datetime:
+    """When the current run of failures actually began.
+
+    An incident opens on the threshold-th consecutive failure, but the outage
+    started at the first one. Dating the incident from the threshold check
+    understates every outage by (threshold - 1) intervals - two minutes on the
+    default 3 failures at 60 seconds - and that shortfall flows straight into
+    downtime totals and the availability figures.
+
+    Derived from the recorded checks rather than by multiplying the interval,
+    because the interval changes (a failing endpoint is checked faster) and a
+    worker outage leaves real gaps.
+    """
+    last_success = (
+        await session.execute(
+            select(func.max(MonitoringResult.checked_at)).where(
+                MonitoringResult.endpoint_id == endpoint_id,
+                MonitoringResult.status != CheckStatus.DOWN.value,
+            )
+        )
+    ).scalar()
+
+    stmt = select(func.min(MonitoringResult.checked_at)).where(
+        MonitoringResult.endpoint_id == endpoint_id,
+        MonitoringResult.status == CheckStatus.DOWN.value,
+    )
+    if last_success is not None:
+        stmt = stmt.where(MonitoringResult.checked_at > last_success)
+
+    first_failure = (await session.execute(stmt)).scalar()
+    if first_failure is None:
+        return fallback
+    if first_failure.tzinfo is None:
+        first_failure = first_failure.replace(tzinfo=timezone.utc)
+    # Never later than this check, whatever the clocks did.
+    return min(first_failure, fallback)
+
+
 async def _open_incident(
     session: AsyncSession,
     endpoint: Endpoint,
@@ -258,11 +298,14 @@ async def _open_incident(
     per endpoint; on conflict we adopt the row the other worker created instead
     of failing the check.
     """
+    started_at = await _outage_started_at(
+        session, endpoint.id, fallback=outcome.checked_at
+    )
     incident = Incident(
         endpoint_id=endpoint.id,
         status=IncidentStatus.OPEN.value,
         severity=Severity.CRITICAL.value,
-        started_at=outcome.checked_at,
+        started_at=started_at,
         reason=outcome.failure_reason,
         error_message=outcome.error_message,
         first_failure_status_code=outcome.http_status_code,
