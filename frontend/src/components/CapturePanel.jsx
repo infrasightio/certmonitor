@@ -92,6 +92,11 @@ function Screenshot({ endpointId, outcome, capture }) {
     return <div className="skeleton aspect-[16/10] w-full rounded-lg" />
   }
 
+  // `onError` matters as much as the fetch above: a blob that arrives intact
+  // can still fail to render - a CSP without `blob:` in img-src blocks it, and
+  // a truncated JPEG will not decode. Both leave the browser's broken-image
+  // icon on the page with nothing logged, so they are routed to the same
+  // message as a failed fetch.
   return (
     <figure className="m-0">
       <a href={url} target="_blank" rel="noopener noreferrer" title="Open full size">
@@ -100,6 +105,7 @@ function Screenshot({ endpointId, outcome, capture }) {
           alt={`${OUTCOME_LABEL[outcome] || outcome} for this endpoint`}
           className="w-full rounded-lg border border-slate-200 bg-white object-cover dark:border-navy-700 dark:bg-navy-800"
           loading="lazy"
+          onError={() => setFailed(true)}
         />
       </a>
       <figcaption className="mt-1.5 text-[11px] text-slate-400">
