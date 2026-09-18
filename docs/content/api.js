@@ -368,6 +368,16 @@ DOCS.page({
       body: DOCS.code(`{"acknowledge": true, "notes": "Upstream vendor incident; ticket VEN-4412."}`, 'request') +
         `<p><code>notes</code> is capped at 4000 characters. Both fields are optional.</p>` }),
 
+    DOCS.endpoint({ method: 'POST', path: '/api/incidents/{id}/resolve', permission: 'incident:write',
+      summary: 'Close an incident by hand, without waiting for a successful check.',
+      body: DOCS.code(`{"note": "Endpoint retired; tracked under CHG-104."}`, 'request') +
+        `<p>The note is required (3&ndash;4000 characters, trimmed). Sets <code>resolved_by_id</code>
+        and <code>resolution_note</code>; leaves the recovery fields NULL, because no check observed
+        a recovery. <code>409</code> if the incident is already resolved.</p>
+        <p><strong>It does not silence the endpoint.</strong> One that is still failing will have
+        this incident reopened, or a new one opened, on a later check &mdash; with the alert that
+        goes with it. See the Incidents page for the reasoning.</p>` }),
+
     DOCS.endpoint({ method: 'GET', path: '/api/alerts', permission: 'alert:read',
       summary: 'Alert history, paginated and filterable.' }),
 

@@ -408,6 +408,12 @@ async def _find_regroupable_incident(
 def _reopen_incident(
     incident: Incident, outcome: CheckOutcome, *, failed_checks: int
 ) -> Incident:
+    # Whoever resolved this by hand no longer has: the endpoint is failing
+    # again and the incident is open, so a "resolved by" on it would describe a
+    # state it is not in. The note stays - it is still the record of why it was
+    # closed - and the timeline below says the decision was overtaken.
+    by_hand = incident.resolved_by_id is not None
+    incident.resolved_by_id = None
     incident.status = IncidentStatus.OPEN.value
     incident.resolved_at = None
     incident.duration_seconds = None
@@ -420,9 +426,13 @@ def _reopen_incident(
     timeline.append(
         _timeline_entry(
             "reopened",
-            f"Failed again within the grouping window - "
-            f"{humanise_reason(outcome.failure_reason)}: "
-            f"{outcome.error_message or 'no further detail'}",
+            (
+                "Resolved by hand, then failed again within the grouping "
+                if by_hand
+                else "Failed again within the grouping "
+            )
+            + f"window - {humanise_reason(outcome.failure_reason)}: "
+            + f"{outcome.error_message or 'no further detail'}",
             outcome.checked_at,
         )
     )
@@ -460,6 +470,57 @@ def _close_incident(
         )
     )
     incident.timeline = timeline
+    return incident
+
+
+def resolve_by_hand(
+    incident: Incident,
+    *,
+    user_id: uuid.UUID,
+    username: str,
+    note: str,
+    at: datetime | None = None,
+) -> Incident:
+    """Close an incident because a person said so, not because it recovered.
+
+    Sits beside `_close_incident` because it is the same transition, but it is
+    emphatically not the same event, and three things follow from that:
+
+    * the recovery fields are left alone. `_close_incident` fills them from the
+      check that proved the endpoint was working; there is no such check here,
+      and inventing a status code would put a measurement in a row that holds
+      only a decision.
+    * the endpoint's live status is not touched. Whether it is up is the
+      monitor's observation to make, and a person closing the paperwork does
+      not change what the next check will find.
+    * nothing is silenced. The endpoint is still checked on its schedule, and a
+      still-failing endpoint will have this incident reopened inside the
+      grouping window, or a new one opened after it - with the alert that goes
+      with it. Resolving by hand closes the record; it does not stop the
+      monitoring, and `_reopen_incident` records when a decision was overtaken.
+    """
+    at = at or datetime.now(timezone.utc)
+    started = incident.started_at
+    if started.tzinfo is None:
+        started = started.replace(tzinfo=timezone.utc)
+
+    incident.status = IncidentStatus.RESOLVED.value
+    incident.resolved_at = at
+    incident.duration_seconds = max(0, int((at - started).total_seconds()))
+    incident.resolved_by_id = user_id
+    incident.resolution_note = note
+
+    timeline = list(incident.timeline or [])
+    timeline.append(
+        _timeline_entry("resolved_by_hand", f"Resolved by {username}: {note}", at)
+    )
+    incident.timeline = timeline[-50:]
+    logger.info(
+        "incident_resolved_by_hand",
+        incident_id=incident.id,
+        endpoint_id=str(incident.endpoint_id),
+        user=username,
+    )
     return incident
 
 

@@ -971,6 +971,14 @@ export default function EndpointDetail() {
                       <dt className="text-slate-500">Resolved</dt>
                       <dd className="font-medium">
                         {incident.resolved_at ? formatDateTime(incident.resolved_at) : '—'}
+                        {/* Without this the row reads as a recovery the
+                            monitor observed, which is the one thing a manual
+                            resolution is not. */}
+                        {incident.resolved_by ? (
+                          <span className="ml-1.5 text-xs font-normal text-slate-500">
+                            by hand · {incident.resolved_by}
+                          </span>
+                        ) : null}
                       </dd>
                     </div>
                     <div className="flex gap-2">

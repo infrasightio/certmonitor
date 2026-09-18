@@ -83,7 +83,8 @@ DOCS.page({
        '<code>monitoring_results</code> to the last non-failing check. Dating it from the threshold ' +
        'instead understated every outage by (threshold &minus; 1) intervals &mdash; two minutes at ' +
        'the defaults &mdash; and that shortfall fed straight into downtime and availability.'],
-      ['<code>resolved_at</code>, <code>duration_seconds</code>', 'Set on recovery'],
+      ['<code>resolved_at</code>, <code>duration_seconds</code>',
+       'Set on recovery, or when someone resolves the incident by hand'],
       ['<code>reason</code>', 'The <code>failure_reason</code> at the time, updated if it changes'],
       ['<code>error_message</code>, <code>first_failure_status_code</code>',
        'The detail from the check that opened it'],
@@ -93,10 +94,14 @@ DOCS.page({
       ['<code>timeline</code>',
        'JSON entries of <code>{at, kind, detail}</code>. Kinds written automatically: ' +
        '<code>opened</code>, <code>reopened</code>, <code>reason_changed</code>, ' +
-       '<code>resolved</code>. Detail is truncated to 500 characters, and the list is capped at the ' +
-       'last 50 entries.'],
+       '<code>resolved</code>, <code>resolved_by_hand</code>. Detail is truncated to 500 ' +
+       'characters, and the list is capped at the last 50 entries.'],
       ['<code>acknowledged_by_id</code>, <code>acknowledged_at</code>, <code>notes</code>',
-       'Operator annotation, via <code>PATCH /api/incidents/{id}</code>']
+       'Operator annotation, via <code>PATCH /api/incidents/{id}</code>'],
+      ['<code>resolved_by_id</code>, <code>resolution_note</code>',
+       'Set only by <code>POST /api/incidents/{id}/resolve</code>. NULL on every incident the ' +
+       'worker closed, which is what distinguishes a decision from an observed recovery &mdash; ' +
+       'see <code>Incident.resolved_by_hand</code>.']
     ]),
 
     `<h2>Incident grouping</h2>
@@ -107,6 +112,39 @@ DOCS.page({
     <p>Only a <em>resolved</em> incident with <strong>no RCA</strong> is eligible for regrouping. One
     that has already been written up should not silently be extended with a second, unrelated
     occurrence&rsquo;s data underneath its owner&rsquo;s back.</p>`,
+
+    `<h2>Resolving by hand</h2>
+    <p>Everything above is the worker&rsquo;s: it opens an incident on the threshold-th consecutive
+    failure and resolves it when a check succeeds. That default is right, and it leaves incidents
+    with no way out &mdash; an endpoint <strong>paused or retired while down</strong> is never
+    checked again, so its incident stays open forever, and an outage handled outside the monitor
+    leaves an open record that is now just noise.</p>
+
+    <p><code>POST /api/incidents/{id}/resolve</code> closes one. It needs <code>incident:write</code>,
+    which only <code>admin</code> holds. The note is required: the worker&rsquo;s own resolutions
+    carry their evidence &mdash; a recovery status code and a response time &mdash; and a manual one
+    has none, so the reason is the only thing that makes the closed incident mean anything later.
+    Resolving an already-resolved incident is a <code>409</code>, because the usual cause is the
+    worker having closed it while the dialog was open.</p>`,
+
+    DOCS.callout('warn', 'It closes the record, not the monitoring',
+      '<p>Nothing is silenced. The endpoint keeps its schedule, so if it is still failing the next ' +
+      'check reopens this incident &mdash; it is a resolved incident inside the grouping window, ' +
+      'which is exactly what regrouping looks for &mdash; or opens a new one after the window, ' +
+      '<strong>with the CRITICAL alert that goes with it</strong>. The UI says so before you click, ' +
+      'and differently depending on whether the endpoint is failing right now.</p>' +
+      '<p>That is deliberate. Monitoring that could be switched off by closing a record would be ' +
+      'worse than having no button at all. To stop the checks, pause the endpoint; to stop the ' +
+      'pages while leaving the checks running, the notification rules are the place.</p>'),
+
+    `<p>Two fields carry the decision. <code>resolved_by_id</code> is the person, and its presence is
+    the flag: an incident with a <code>resolved_at</code> and no <code>resolved_by_id</code>
+    recovered on its own. <code>resolution_note</code> is why. The recovery fields stay NULL &mdash;
+    no check observed a recovery, and a status code no check produced would be a measurement sitting
+    inside a record that holds only a decision. If the incident is later reopened,
+    <code>resolved_by_id</code> is cleared (an open incident cannot have been resolved by anyone) and
+    the <code>reopened</code> timeline entry says the decision was overtaken; the note stays, because
+    it is still the record of why it was closed.</p>`,
 
     `<h2>Comments</h2>
     <p><code>incident_comments</code> is a plain conversation attached to an incident: &ldquo;started

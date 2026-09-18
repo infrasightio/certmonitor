@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.common import ORMModel
 
@@ -210,12 +210,41 @@ class IncidentRead(ORMModel):
     acknowledged_at: datetime | None = None
     acknowledged_by: str | None = None
     notes: str | None = None
+    # Present only on an incident closed by a person. Both are null on one the
+    # worker resolved, which is how a reader tells a decision from an observed
+    # recovery - see Incident.resolved_by_hand.
+    resolved_by: str | None = None
+    resolution_note: str | None = None
     created_at: datetime
 
 
 class IncidentUpdate(BaseModel):
     notes: str | None = Field(default=None, max_length=4000)
     acknowledge: bool | None = None
+
+
+class IncidentResolve(BaseModel):
+    """Close an incident by hand.
+
+    The note is required, and deliberately so. The worker's own resolutions
+    carry their evidence - a recovery status code and a response time - and a
+    manual one has none, so the reason is the only thing that makes the closed
+    incident mean anything later.
+    """
+
+    note: str = Field(min_length=3, max_length=4000)
+
+    @field_validator("note")
+    @classmethod
+    def _meaningful(cls, value: str) -> str:
+        """Trimmed, and still required after trimming.
+
+        `min_length` alone counts three spaces as a reason.
+        """
+        trimmed = value.strip()
+        if len(trimmed) < 3:
+            raise ValueError("Say why this incident is being resolved.")
+        return trimmed
 
 
 def incident_endpoint_ref(endpoint: Any) -> IncidentEndpointRef | None:
@@ -238,6 +267,7 @@ def incident_to_schema(
     *,
     reason_label: str | None = None,
     acknowledged_by: str | None = None,
+    resolved_by: str | None = None,
 ) -> IncidentRead:
     """Build an :class:`IncidentRead` from an ``Incident`` row.
 
@@ -267,6 +297,8 @@ def incident_to_schema(
         acknowledged_at=incident.acknowledged_at,
         acknowledged_by=acknowledged_by,
         notes=incident.notes,
+        resolved_by=resolved_by,
+        resolution_note=incident.resolution_note,
         created_at=incident.created_at,
     )
 

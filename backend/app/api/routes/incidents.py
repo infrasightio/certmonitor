@@ -30,6 +30,7 @@ from app.schemas.monitoring import (
     AlertAcknowledge,
     AlertRead,
     IncidentRead,
+    IncidentResolve,
     IncidentUpdate,
     incident_to_schema,
 )
@@ -39,12 +40,16 @@ router = APIRouter(tags=["Incidents & Alerts"])
 
 
 def _incident_to_schema(
-    incident: Incident, *, acknowledged_by: str | None = None
+    incident: Incident,
+    *,
+    acknowledged_by: str | None = None,
+    resolved_by: str | None = None,
 ) -> IncidentRead:
     return incident_to_schema(
         incident,
         reason_label=monitoring_service.humanise_reason(incident.reason),
         acknowledged_by=acknowledged_by,
+        resolved_by=resolved_by,
     )
 
 
@@ -55,14 +60,16 @@ def _incident_query():
     )
 
 
-async def _acknowledger_names(session, incidents) -> dict[uuid.UUID, str]:
-    """Who acknowledged each of these incidents, in one query.
+async def _usernames(session, incidents) -> dict[uuid.UUID, str]:
+    """Every user these incidents name, in one query.
 
-    Resolved for the whole page at once rather than per row: "acknowledged"
-    without a name is a record of nothing, but looking each one up
-    individually would add a query per incident.
+    Resolved for the whole page at once rather than per row: "acknowledged" or
+    "resolved" without a name is a record of nothing, but looking each one up
+    individually would add a query per incident. Both fields go through the
+    same lookup because the same person usually did both.
     """
     ids = {i.acknowledged_by_id for i in incidents if i.acknowledged_by_id}
+    ids |= {i.resolved_by_id for i in incidents if i.resolved_by_id}
     if not ids:
         return {}
     rows = (
@@ -161,12 +168,14 @@ async def list_incidents(
         .all()
     )
 
-    acknowledgers = await _acknowledger_names(session, rows)
+    names = await _usernames(session, rows)
 
     return Page.build(
         [
             _incident_to_schema(
-                row, acknowledged_by=acknowledgers.get(row.acknowledged_by_id)
+                row,
+                acknowledged_by=names.get(row.acknowledged_by_id),
+                resolved_by=names.get(row.resolved_by_id),
             )
             for row in rows
         ],
@@ -192,14 +201,12 @@ async def get_incident(
             status_code=status.HTTP_404_NOT_FOUND, detail="Incident not found."
         )
 
-    acknowledged_by = None
-    if incident.acknowledged_by_id:
-        acknowledged_by = (
-            await session.execute(
-                select(User.username).where(User.id == incident.acknowledged_by_id)
-            )
-        ).scalar()
-    return _incident_to_schema(incident, acknowledged_by=acknowledged_by)
+    names = await _usernames(session, [incident])
+    return _incident_to_schema(
+        incident,
+        acknowledged_by=names.get(incident.acknowledged_by_id),
+        resolved_by=names.get(incident.resolved_by_id),
+    )
 
 
 @router.patch(
@@ -217,8 +224,8 @@ async def update_incident(
     """Annotate an incident.
 
     Incidents are opened and closed by the monitoring worker from observed
-    state; a human can acknowledge one and record why it happened, but cannot
-    declare it resolved by hand.
+    state. This is the human record kept beside that: who has it, and what
+    they found. To close one by hand, see POST /incidents/{id}/resolve.
     """
     incident = (
         await session.execute(_incident_query().where(Incident.id == incident_id))
@@ -253,9 +260,94 @@ async def update_incident(
     )
     await session.commit()
     await session.refresh(incident)
+    names = await _usernames(session, [incident])
     return _incident_to_schema(
         incident,
-        acknowledged_by=user.username if incident.acknowledged_by_id else None,
+        acknowledged_by=names.get(incident.acknowledged_by_id),
+        resolved_by=names.get(incident.resolved_by_id),
+    )
+
+
+@router.post(
+    "/incidents/{incident_id}/resolve",
+    response_model=IncidentRead,
+    summary="Resolve an incident by hand",
+    responses={409: {"description": "The incident is already resolved"}},
+)
+async def resolve_incident(
+    incident_id: int,
+    payload: IncidentResolve,
+    user: WriteIncidents,
+    request: Request,
+    session: DbSession,
+) -> IncidentRead:
+    """Close an incident without waiting for the endpoint to be seen working.
+
+    The worker resolves an incident when a check succeeds, which is the right
+    default and leaves two cases with no way out: an endpoint paused or
+    deleted while down, whose incident would stay open forever because no
+    further check will ever run; and an outage dealt with outside the monitor,
+    where the open incident is now just noise on the list.
+
+    What this does NOT do is silence anything. The endpoint keeps its
+    schedule, and if it is still failing the monitor will reopen this incident
+    within the grouping window - or open a new one after it - and alert again.
+    That is deliberate: a resolution by hand closes a record, and monitoring
+    that could be switched off by closing a record would be worse than no
+    button at all. `incident:write` is admin-only, so this is an admin action.
+    """
+    incident = (
+        await session.execute(_incident_query().where(Incident.id == incident_id))
+    ).scalars().unique().one_or_none()
+    if incident is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Incident not found."
+        )
+    if not incident.is_open:
+        # 409 rather than a silent success: the state the caller acted on is
+        # not the state the incident is in, and on a list that refreshes every
+        # few seconds that usually means the worker closed it first.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "This incident is already resolved. It may have recovered on "
+                "its own while you were looking at it."
+            ),
+        )
+
+    monitoring_service.resolve_by_hand(
+        incident,
+        user_id=user.id,
+        username=user.username,
+        note=payload.note,
+    )
+
+    await audit_service.record(
+        session,
+        action=AuditAction.INCIDENT_RESOLVED.value,
+        user=user,
+        resource_type="incident",
+        resource_id=incident.id,
+        resource_name=incident.endpoint.name if incident.endpoint else None,
+        details={
+            "note": payload.note[:500],
+            "duration_seconds": incident.duration_seconds,
+            # The endpoint's live status at the moment of the decision. An
+            # incident closed while the endpoint was still down is the case
+            # worth being able to find again later.
+            "endpoint_status": (
+                incident.endpoint.current_status if incident.endpoint else None
+            ),
+        },
+        request=request,
+    )
+    await session.commit()
+    await session.refresh(incident)
+    names = await _usernames(session, [incident])
+    return _incident_to_schema(
+        incident,
+        acknowledged_by=names.get(incident.acknowledged_by_id),
+        resolved_by=names.get(incident.resolved_by_id),
     )
 
 

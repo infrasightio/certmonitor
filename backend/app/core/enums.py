@@ -229,6 +229,7 @@ class AuditAction(StrEnum):
     NOTIFICATION_CHANNEL_DELETED = "notification_channel_deleted"
     ALERT_ACKNOWLEDGED = "alert_acknowledged"
     INCIDENT_UPDATED = "incident_updated"
+    INCIDENT_RESOLVED = "incident_resolved"
     INCIDENT_COMMENTED = "incident_commented"
     RCA_REQUESTED = "rca_requested"
     RCA_ASSIGNED = "rca_assigned"

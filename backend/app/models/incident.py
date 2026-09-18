@@ -77,6 +77,15 @@ class Incident(Base):
     acknowledged_at: Mapped[datetime | None] = mapped_column(TimestampTZ)
     notes: Mapped[str | None] = mapped_column(Text)
 
+    # Set only when a person closed this incident rather than the worker
+    # observing a recovery, which makes it the flag for "resolved by hand" as
+    # well as the record of who did it. The worker leaves it NULL, so an
+    # incident with a resolved_at and no resolved_by_id recovered on its own.
+    resolved_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    resolution_note: Mapped[str | None] = mapped_column(Text)
+
     created_at: Mapped[datetime] = mapped_column(
         TimestampTZ, nullable=False, default=utcnow, server_default=func.now()
     )
@@ -84,3 +93,14 @@ class Incident(Base):
     @property
     def is_open(self) -> bool:
         return self.status == IncidentStatus.OPEN.value
+
+    @property
+    def resolved_by_hand(self) -> bool:
+        """Whether a person closed this, rather than an observed recovery.
+
+        Worth distinguishing wherever the incident is read as evidence: a
+        manually resolved incident says the outage stopped being tracked, not
+        that the endpoint was seen to work again, so its `resolved_at` is a
+        decision and not a measurement.
+        """
+        return self.resolved_by_id is not None

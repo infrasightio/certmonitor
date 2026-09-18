@@ -320,6 +320,10 @@ export const incidentsApi = {
   list: (params) => api.get('/incidents', { params: cleanParams(params) }).then((r) => r.data),
   get: (id) => api.get(`/incidents/${id}`).then((r) => r.data),
   update: (id, payload) => api.patch(`/incidents/${id}`, payload).then((r) => r.data),
+  // Closes the record only. The endpoint keeps its schedule, so one that is
+  // still failing will have this incident reopened or a new one raised.
+  resolve: (id, note) =>
+    api.post(`/incidents/${id}/resolve`, { note }).then((r) => r.data),
 }
 
 export const alertsApi = {

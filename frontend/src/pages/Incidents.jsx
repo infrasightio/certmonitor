@@ -53,6 +53,11 @@ export default function Incidents() {
   const [selected, setSelected] = useState(null)
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
+  // Resolving by hand is two steps on purpose. The note is what makes the
+  // closed incident mean anything later, and a single click would produce a
+  // resolved incident with no reason on it.
+  const [resolving, setResolving] = useState(false)
+  const [resolutionNote, setResolutionNote] = useState('')
 
   useEffect(() => {
     endpointsApi.filters().then(setFilters).catch(() => {})
@@ -108,6 +113,8 @@ export default function Incidents() {
       const full = await incidentsApi.get(incident.id)
       setSelected(full)
       setNotes(full.notes || '')
+      setResolving(false)
+      setResolutionNote('')
     } catch (err) {
       toast.error(err.message)
     }
@@ -124,6 +131,25 @@ export default function Incidents() {
       toast.success('Incident updated.')
       load({ silent: true })
     } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const resolveIncident = async () => {
+    if (!selected) return
+    setSaving(true)
+    try {
+      const updated = await incidentsApi.resolve(selected.id, resolutionNote.trim())
+      setSelected(updated)
+      setResolving(false)
+      setResolutionNote('')
+      toast.success('Incident resolved.')
+      load({ silent: true })
+    } catch (err) {
+      // A 409 here is the ordinary race: the worker saw a recovery while the
+      // dialog was open. The API's own wording says so, so it is shown as-is.
       toast.error(err.message)
     } finally {
       setSaving(false)
@@ -449,7 +475,100 @@ export default function Incidents() {
                   )}
                 </dd>
               </div>
+              {/* Only on an incident a person closed. Its absence is what says
+                  the endpoint was seen working again - the Recovery row above
+                  carries the check that proved it. */}
+              {selected.resolved_by ? (
+                <div className="sm:col-span-2">
+                  <dt className="text-xs text-slate-500">Resolved by hand</dt>
+                  <dd className="font-medium">
+                    {selected.resolved_by}
+                    <span className="ml-1.5 text-xs font-normal text-slate-500">
+                      {formatDateTime(selected.resolved_at)}
+                    </span>
+                    {selected.resolution_note ? (
+                      <p className="mt-0.5 text-xs font-normal text-slate-600 dark:text-slate-300">
+                        {selected.resolution_note}
+                      </p>
+                    ) : null}
+                  </dd>
+                </div>
+              ) : null}
             </dl>
+
+            {canWrite && selected.status === 'open' ? (
+              <div className="rounded-lg border border-slate-200 p-3 dark:border-navy-700">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
+                      Resolve by hand
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      For an incident the monitor will never close on its own: an
+                      endpoint paused or retired while down, or an outage already
+                      dealt with elsewhere.
+                    </p>
+                  </div>
+                  {resolving ? null : (
+                    <button
+                      type="button"
+                      className="btn-secondary btn-sm shrink-0"
+                      onClick={() => setResolving(true)}
+                    >
+                      <CheckCircle2 size={14} /> Resolve
+                    </button>
+                  )}
+                </div>
+
+                {resolving ? (
+                  <div className="mt-3 space-y-2">
+                    <label htmlFor="resolution-note" className="label">
+                      Why is this resolved?
+                    </label>
+                    <textarea
+                      id="resolution-note"
+                      className="input"
+                      rows={3}
+                      value={resolutionNote}
+                      onChange={(event) => setResolutionNote(event.target.value)}
+                      placeholder="Endpoint retired; outage handled under change CHG-104…"
+                    />
+                    {/* Said plainly, and differently depending on what the
+                        endpoint is doing right now: clicking this on something
+                        that is still failing will produce another page, and
+                        finding that out afterwards is how a button like this
+                        loses people's trust. */}
+                    <p className="hint">
+                      {selected.endpoint?.current_status === 'down'
+                        ? 'This endpoint is failing right now. Closing the record does not pause the monitoring - the next failed check will reopen this incident or raise a new one, and alert again.'
+                        : 'This closes the record without waiting for a successful check. Monitoring is unaffected: a new failure opens a new incident as usual.'}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="btn-primary btn-sm"
+                        onClick={resolveIncident}
+                        disabled={saving || resolutionNote.trim().length < 3}
+                      >
+                        {saving ? <Spinner size={14} className="text-white" /> : null}
+                        Resolve incident
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary btn-sm"
+                        onClick={() => {
+                          setResolving(false)
+                          setResolutionNote('')
+                        }}
+                        disabled={saving}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
 
             {/* RCA sits inside the incident dialog, never as a gate in front
                 of it - resolving and closing stay untouched. */}
@@ -500,7 +619,9 @@ export default function Incidents() {
               />
               <p className="hint">
                 Incidents are opened and closed by the monitoring worker from observed
-                state. Notes and acknowledgement are the human record.
+                state. Notes and acknowledgement are the human record beside it;
+                resolving by hand closes the record without waiting for a check to
+                succeed.
               </p>
             </div>
           </div>
