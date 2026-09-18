@@ -16,6 +16,7 @@ import {
 } from '../components/ui'
 import { alertsApi, settingsApi } from '../lib/api'
 import { ALERT_TYPE_LABELS, formatDateTime, formatRelative, humanise } from '../lib/format'
+import { useAlertCount } from '../hooks/useAlertCount'
 import { useAuth } from '../hooks/useAuth'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
 import { useToast } from '../hooks/useToast'
@@ -42,7 +43,9 @@ export default function Alerts() {
 
   const [data, setData] = useState(null)
   const [options, setOptions] = useState({ alert_types: [], severities: [] })
-  const [counts, setCounts] = useState(null)
+  // The same counts the nav badge reads. Acknowledging refreshes one figure
+  // and both places move together; two copies is how the badge used to lag.
+  const { counts, loaded: countsLoaded, refresh: refreshCounts } = useAlertCount()
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState(null)
@@ -51,10 +54,6 @@ export default function Alerts() {
 
   useEffect(() => {
     settingsApi.alertOptions().then(setOptions).catch(() => {})
-  }, [])
-
-  const loadCounts = useCallback(() => {
-    alertsApi.unacknowledgedCount().then(setCounts).catch(() => {})
   }, [])
 
   const load = useCallback(
@@ -84,13 +83,19 @@ export default function Alerts() {
 
   useEffect(() => {
     load()
-    loadCounts()
-  }, [load, loadCounts])
+  }, [load])
+
+  // Its own effect rather than alongside `load`: the counts do not depend on
+  // this page's filters, and the shared figure may be most of a poll cycle
+  // old by the time someone navigates here.
+  useEffect(() => {
+    refreshCounts()
+  }, [refreshCounts])
 
   // Paused while rows are selected, so an acknowledge is never applied to a
   // list that shifted underneath the selection.
   useAutoRefresh(
-    () => Promise.all([load({ silent: true }), loadCounts()]),
+    () => Promise.all([load({ silent: true }), refreshCounts()]),
     { paused: selected.size > 0 },
   )
 
@@ -106,7 +111,7 @@ export default function Alerts() {
       toast.success(`${result.succeeded} alert(s) acknowledged.`)
       setSelected(new Set())
       load({ silent: true })
-      loadCounts()
+      refreshCounts()
     } catch (err) {
       toast.error(err.message)
     } finally {
@@ -119,7 +124,8 @@ export default function Alerts() {
       await alertsApi.remove(id)
       toast.success('Alert deleted.')
       load({ silent: true })
-      loadCounts()
+      // Deleting an unacknowledged alert changes the badge too.
+      refreshCounts()
     } catch (err) {
       toast.error(err.message)
     }
@@ -133,7 +139,7 @@ export default function Alerts() {
       <PageHeader
         title="Alerts"
         description={
-          counts
+          countsLoaded
             ? `${counts.total || 0} unacknowledged${counts.critical ? ` · ${counts.critical} critical` : ''}`
             : 'Generated alerts and their delivery status'
         }
@@ -144,7 +150,7 @@ export default function Alerts() {
               className="btn-secondary"
               onClick={() => {
                 load({ silent: true })
-                loadCounts()
+                refreshCounts()
               }}
               disabled={refreshing}
             >

@@ -27,8 +27,9 @@ import {
 } from 'lucide-react'
 import clsx from 'clsx'
 
-import { alertsApi, healthApi } from '../lib/api'
+import { healthApi } from '../lib/api'
 import { BrandMark, UserAvatar } from '../components/ui'
+import { useAlertCount } from '../hooks/useAlertCount'
 import { useAuth } from '../hooks/useAuth'
 import { useBranding } from '../hooks/useBranding'
 import { useFeatures } from '../hooks/useFeatures'
@@ -139,21 +140,20 @@ export default function AppLayout() {
   const [railCollapsed, setRailCollapsed] = useCollapsedRail()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
-  const [alertCount, setAlertCount] = useState(0)
   const [health, setHealth] = useState(null)
+  // Shared, so acknowledging on the alerts page clears this badge at the same
+  // moment the rows disappear rather than at the next poll.
+  const { total: alertCount } = useAlertCount()
 
   // Close the mobile drawer whenever the route changes.
   useEffect(() => setMobileOpen(false), [location.pathname])
 
-  // Poll the badge and the worker health indicator. Both are cheap endpoints;
-  // the dashboard itself is not polled, so an idle tab stays quiet.
+  // Poll the worker health indicator. Cheap, and the dashboard itself is not
+  // polled, so an idle tab stays quiet. The alert badge polls itself inside
+  // useAlertCount, where the pages that change it can also refresh it.
   useEffect(() => {
     let cancelled = false
     const refresh = () => {
-      alertsApi
-        .unacknowledgedCount()
-        .then((data) => !cancelled && setAlertCount(data.total || 0))
-        .catch(() => {})
       healthApi
         .health()
         .then((data) => !cancelled && setHealth(data))

@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 
 import App from './App'
+import { AlertCountProvider } from './hooks/useAlertCount'
 import { AuthProvider } from './hooks/useAuth'
 import { BrandingProvider } from './hooks/useBranding'
 import { FeaturesProvider } from './hooks/useFeatures'
@@ -16,7 +17,10 @@ createRoot(document.getElementById('root')).render(
         <BrandingProvider>
           <AuthProvider>
             <FeaturesProvider>
-              <App />
+              {/* Inside auth: the count is per-user and needs a token. */}
+              <AlertCountProvider>
+                <App />
+              </AlertCountProvider>
             </FeaturesProvider>
           </AuthProvider>
         </BrandingProvider>
