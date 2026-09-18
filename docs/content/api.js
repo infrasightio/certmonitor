@@ -248,6 +248,22 @@ DOCS.page({
         <code>paused_by_change_id</code>, so a later deployment completion cannot resume it behind
         the operator.</p>` }),
 
+    DOCS.endpoint({ method: 'POST', path: '/api/endpoints/{id}/silence', permission: 'endpoint:write',
+      summary: 'Stop this endpoint&rsquo;s notifications for a while, without stopping its checks.',
+      body: DOCS.code(`{"minutes": 60, "reason": "Deploying v2"}`, 'request') +
+        `<p><code>minutes</code> is 5&ndash;10080 (7 days) and <code>reason</code> is required.
+        Monitoring is untouched &mdash; checks, results, incidents and uptime all continue. Alerts
+        are still raised and recorded, marked <code>skipped</code> with the reason, including the
+        recovery notice. Re-silencing replaces the window rather than extending it.</p>
+        <p>For indefinite silence use <code>alerts_enabled = false</code> on the endpoint instead:
+        this one always expires, deliberately.</p>` }),
+
+    DOCS.endpoint({ method: 'DELETE', path: '/api/endpoints/{id}/silence', permission: 'endpoint:write',
+      summary: 'End a silence early.',
+      body: `<p>Idempotent: un-silencing an endpoint that is already audible returns 200, because
+        that is the state the caller asked for. Clears the reason and the attribution along with
+        the timestamp.</p>` }),
+
     DOCS.endpoint({ method: 'DELETE', path: '/api/endpoints/{id}', permission: 'endpoint:delete',
       summary: 'Delete the endpoint and its monitoring history.',
       body: `<p>Results, certificates, incidents and captures cascade with it. The audit entry remains

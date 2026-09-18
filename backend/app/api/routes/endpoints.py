@@ -31,6 +31,7 @@ from app.models.diagnosis import Diagnosis
 from app.models.endpoint import Endpoint, Environment, Tag
 from app.models.incident import Incident
 from app.models.monitoring import MonitoringResult, SslCertificate
+from app.models.user import User
 from app.monitoring import network
 from app.monitoring.validators import UrlValidationError
 from app.schemas.common import BulkActionResult, Message, Page
@@ -43,6 +44,7 @@ from app.schemas.endpoint import (
     EndpointListItem,
     EndpointNetwork,
     EndpointRead,
+    EndpointSilence,
     EndpointStatusSummary,
     EndpointStatusUpdate,
     EndpointUpdate,
@@ -341,6 +343,10 @@ async def get_endpoint(
         endpoint,
         uptime_percent=uptime.get(endpoint.id),
         has_open_incident=endpoint.id in open_incidents,
+        # "Who silenced this?" is the first question a quiet endpoint raises,
+        # so it is resolved here rather than only on the response to the call
+        # that silenced it.
+        silenced_by=await _silencer_name(session, endpoint),
         effective_interval_seconds=monitoring_service.resolve_check_interval(
             endpoint, config
         ),
@@ -468,6 +474,143 @@ async def set_monitoring_state(
     await session.refresh(endpoint, ["tags", "environment", "dependencies"])
     return endpoint_to_read(
         endpoint,
+        effective_interval_seconds=monitoring_service.resolve_check_interval(
+            endpoint, config
+        ),
+        thresholds=monitoring_service.resolve_thresholds(endpoint, config),
+    )
+
+
+# ---------------------------------------------------------------- silence
+async def _silencer_name(session, endpoint: Endpoint) -> str | None:
+    """The username behind an active silence, if there is one."""
+    if not endpoint.is_silenced or endpoint.silenced_by_id is None:
+        return None
+    return (
+        await session.execute(
+            select(User.username).where(User.id == endpoint.silenced_by_id)
+        )
+    ).scalar()
+
+
+@router.post(
+    "/{endpoint_id}/silence",
+    response_model=EndpointRead,
+    summary="Stop this endpoint's notifications for a while",
+)
+async def silence_endpoint(
+    endpoint_id: uuid.UUID,
+    payload: EndpointSilence,
+    user: WriteEndpoints,
+    request: Request,
+    session: DbSession,
+    config: RuntimeConfig,
+) -> EndpointRead:
+    """Silence the alerts, keep the monitoring.
+
+    Pausing was the only way to stop an endpoint paging people, and it stops
+    the checks too - so a deployment window or an afternoon of known noise
+    cost you the results, the incidents and the uptime figure for the period,
+    which is usually the very data you wanted afterwards. This stops only the
+    delivery.
+
+    Everything else carries on unchanged: checks run on schedule, results are
+    recorded, incidents open and close, uptime counts. Alerts are still raised
+    and still listed - marked `skipped`, with the reason - so the history
+    shows exactly what would have been sent. That includes the recovery
+    notice: an endpoint nobody wants to hear from is one they do not want the
+    all-clear from either.
+
+    Re-silencing an already-silenced endpoint replaces the window rather than
+    extending it, which is what "silence for another hour" means in practice.
+    """
+    endpoint = await _load_endpoint(session, endpoint_id)
+    until = datetime.now(timezone.utc) + timedelta(minutes=payload.minutes)
+
+    endpoint.silenced_until = until
+    endpoint.silence_reason = payload.reason
+    endpoint.silenced_by_id = user.id
+    endpoint.updated_by_id = user.id
+
+    await audit_service.record(
+        session,
+        action=AuditAction.ENDPOINT_SILENCED.value,
+        user=user,
+        resource_type="endpoint",
+        resource_id=endpoint.id,
+        resource_name=endpoint.name,
+        details={
+            "until": until.isoformat(),
+            "minutes": payload.minutes,
+            "reason": payload.reason,
+        },
+        request=request,
+    )
+    await session.commit()
+    await session.refresh(endpoint, ["tags", "environment", "dependencies"])
+    logger.info(
+        "endpoint_silenced",
+        endpoint=endpoint.name,
+        until=until.isoformat(),
+        by=user.username,
+    )
+    return endpoint_to_read(
+        endpoint,
+        silenced_by=user.username,
+        updated_by=user.username,
+        effective_interval_seconds=monitoring_service.resolve_check_interval(
+            endpoint, config
+        ),
+        thresholds=monitoring_service.resolve_thresholds(endpoint, config),
+    )
+
+
+@router.delete(
+    "/{endpoint_id}/silence",
+    response_model=EndpointRead,
+    summary="Let this endpoint alert again",
+)
+async def unsilence_endpoint(
+    endpoint_id: uuid.UUID,
+    user: WriteEndpoints,
+    request: Request,
+    session: DbSession,
+    config: RuntimeConfig,
+) -> EndpointRead:
+    """End a silence early.
+
+    Idempotent, and deliberately not a 409 on an endpoint that is not
+    silenced: the caller wants it audible, and it is. Clears the whole record
+    rather than only the timestamp - a lapsed reason on a live endpoint reads
+    as a silence still in force.
+    """
+    endpoint = await _load_endpoint(session, endpoint_id)
+    was_silenced = endpoint.is_silenced
+    previous_reason = endpoint.silence_reason
+
+    endpoint.silenced_until = None
+    endpoint.silence_reason = None
+    endpoint.silenced_by_id = None
+    endpoint.updated_by_id = user.id
+
+    await audit_service.record(
+        session,
+        action=AuditAction.ENDPOINT_UNSILENCED.value,
+        user=user,
+        resource_type="endpoint",
+        resource_id=endpoint.id,
+        resource_name=endpoint.name,
+        # Recorded either way: "they un-silenced something already audible"
+        # and "they cut a silence short" are different events, and only the
+        # second one explains why a page arrived.
+        details={"was_silenced": was_silenced, "previous_reason": previous_reason},
+        request=request,
+    )
+    await session.commit()
+    await session.refresh(endpoint, ["tags", "environment", "dependencies"])
+    return endpoint_to_read(
+        endpoint,
+        updated_by=user.username,
         effective_interval_seconds=monitoring_service.resolve_check_interval(
             endpoint, config
         ),

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     Boolean,
@@ -250,7 +250,23 @@ class Endpoint(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     response_time_threshold_ms: Mapped[int | None] = mapped_column(Integer)
     ssl_warning_days: Mapped[int | None] = mapped_column(Integer)
     ssl_critical_days: Mapped[int | None] = mapped_column(Integer)
+    # The permanent per-endpoint off switch: no alert is raised at all, so
+    # there is no record either. For "stop paging me about this for the next
+    # two hours", see the silence columns below.
     alerts_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    # ------------------------------------------------- alert silence
+    # Monitoring continues in full - checks, results, incidents, uptime - and
+    # only the notifications stop. That is the whole point: pausing an endpoint
+    # to stop it paging people throws away the data you are pausing it to
+    # protect. Always time-boxed, because a silence nobody remembers is how an
+    # outage goes unnoticed for a week; there is no "silence forever" here, and
+    # `alerts_enabled` above is the setting for that.
+    silenced_until: Mapped[datetime | None] = mapped_column(TimestampTZ)
+    silence_reason: Mapped[str | None] = mapped_column(String(255))
+    silenced_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
 
     # ------------------------------------------------------ live state
     current_status: Mapped[str] = mapped_column(
@@ -344,6 +360,21 @@ class Endpoint(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     @property
     def tag_names(self) -> list[str]:
         return [t.name for t in self.tags]
+
+    @property
+    def is_silenced(self) -> bool:
+        """Whether notifications for this endpoint are suppressed right now.
+
+        Derived from the clock rather than from a flag some job has to clear,
+        so a silence ends by itself even if nothing is running to notice.
+        """
+        if self.silenced_until is None:
+            return False
+        until = self.silenced_until
+        if until.tzinfo is None:
+            # Read back from SQLite, which does not store the offset.
+            until = until.replace(tzinfo=timezone.utc)
+        return until > datetime.now(timezone.utc)
 
     @property
     def uptime_ratio(self) -> float | None:

@@ -114,7 +114,9 @@ DOCS.page({
             ['<code>ssl_critical_days</code>', '1&ndash;180',
              'Environment override, then <code>ssl_critical_days</code>, then 7'],
             ['<code>alerts_enabled</code>', 'Boolean, default true',
-             'A per-endpoint mute. <code>raise_alert</code> returns None for this endpoint entirely.']
+             'A permanent per-endpoint mute. <code>raise_alert</code> returns None for this ' +
+             'endpoint entirely, so there is no alert row either. For a temporary one, see ' +
+             'Silencing below.']
           ])
       }
     ]),
@@ -210,6 +212,44 @@ DOCS.page({
       'a deployment only resumes the endpoints it actually paused: the ' +
       '<code>change_endpoints.was_paused_before</code> flag records what it found, and an endpoint ' +
       'that was already paused stays paused.</p>'),
+
+    `<h2>Silencing: alerts off, monitoring on</h2>
+    <p>Pausing is the wrong tool for &ldquo;stop paging me about this for the next hour&rdquo;,
+    because it stops the checks too: no results, no incidents and no uptime figure for the period,
+    which is usually exactly the data wanted once the hour is over. A silence stops only the
+    delivery.</p>`,
+
+    DOCS.table(['Field', 'Set by', 'Effect'], [
+      ['<code>silenced_until</code>',
+       '<code>POST /api/endpoints/{id}/silence</code>, 5 minutes to 7 days from now',
+       'While in the future, no notification for this endpoint is delivered'],
+      ['<code>silence_reason</code>', 'Required, 3&ndash;255 characters',
+       'Shown on the endpoint, in the list and on the held-back alerts'],
+      ['<code>silenced_by_id</code>', 'The caller',
+       'Who to ask about it. Surfaced as <code>silenced_by</code> on the detail route']
+    ]),
+
+    `<p>Checks run on schedule, results are recorded, incidents open and close, and uptime counts -
+    all exactly as before. Alerts are still raised and still listed, marked
+    <code>skipped</code> with the reason in <code>notification_error</code>, so afterwards you can
+    see precisely which pages were held back and why. That is the difference from
+    <code>alerts_enabled</code>, where the alert never exists at all.</p>
+
+    <p>The recovery notice is silenced too. An endpoint nobody wants to hear from is not one they
+    want the all-clear from either &mdash; and since recovery notices are exempt from the alert
+    cooldown, it would otherwise be the one thing that got through.</p>`,
+
+    DOCS.callout('note', 'A silence always expires',
+      '<p><code>Endpoint.is_silenced</code> compares <code>silenced_until</code> against the clock ' +
+      'wherever it is read, so a silence lapses on its own and no background job is needed to end ' +
+      'one. That is also why the API bounds the window at seven days: a silence that can be ' +
+      'forgotten is how an outage goes unnoticed for a week. If alerting should be off ' +
+      'indefinitely, <code>alerts_enabled = false</code> is the honest way to say so, and it shows ' +
+      'up in the endpoint&rsquo;s configuration rather than expiring quietly.</p>' +
+      '<p>Re-silencing replaces the window rather than extending it, which is what &ldquo;another ' +
+      'half hour&rdquo; means in practice. <code>DELETE</code> ends one early and is idempotent - ' +
+      'un-silencing an audible endpoint is not an error, because the caller wants it audible and ' +
+      'it is.</p>'),
 
     `<h2>Bulk actions</h2>
     <p><code>POST /api/endpoints/bulk</code> takes a list of ids and one action. Requires

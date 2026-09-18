@@ -58,6 +58,25 @@ async def in_cooldown(
     return (await session.execute(stmt)).first() is not None
 
 
+def _silence_note(endpoint: Endpoint | None) -> str | None:
+    """Why this alert is not being sent, or None if it is.
+
+    Written into `notification_error`, which is the field the alert list
+    already shows beside anything not delivered - so the explanation lands
+    where someone looking at a silent alert will actually read it. Not an
+    error, and worded so nobody reads it as one.
+    """
+    if endpoint is None or not endpoint.is_silenced:
+        return None
+    until = endpoint.silenced_until
+    reason = (endpoint.silence_reason or "").strip()
+    return (
+        f"Not sent: alerts for this endpoint are silenced until "
+        f"{until:%d %b %Y %H:%M} UTC"
+        + (f" - {reason}" if reason else "")
+    )[:1000]
+
+
 async def raise_alert(
     session: AsyncSession,
     *,
@@ -75,6 +94,9 @@ async def raise_alert(
 
     Returns ``None`` when the alert was suppressed by the cooldown or by the
     global/per-endpoint alerting switches.
+
+    A SILENCED endpoint is not one of those cases. Its alert is raised and
+    recorded exactly as usual and simply not delivered - see `_silence_note`.
     """
     config = config or {}
     if not config.get("alerts_enabled", True):
@@ -112,7 +134,22 @@ async def raise_alert(
     session.add(alert)
     await session.flush()
 
-    if dispatch and config.get("notifications_enabled", True):
+    silence = _silence_note(endpoint)
+    if silence is not None:
+        # Recorded, not delivered. The row is what makes a silence auditable:
+        # afterwards you can see exactly which pages were held back and why,
+        # which is the difference between this and `alerts_enabled`, where the
+        # alert never existed. Deliberately covers the recovery notice too - a
+        # silenced endpoint is one nobody wants to hear from either way.
+        alert.notification_status = "skipped"
+        alert.notification_error = silence
+        logger.info(
+            "alert_not_sent_endpoint_silenced",
+            alert_type=alert_type,
+            endpoint=endpoint.name if endpoint else None,
+            silenced_until=endpoint.silenced_until.isoformat() if endpoint else None,
+        )
+    elif dispatch and config.get("notifications_enabled", True):
         try:
             await notification_service.dispatch_alert(session, alert, config=config)
         except Exception as exc:  # pragma: no cover - defensive

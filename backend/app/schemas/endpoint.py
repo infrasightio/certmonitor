@@ -393,6 +393,12 @@ class EndpointListItem(ORMModel):
     # itself instead of just going quiet.
     pause_reason: str | None = None
     paused_by_change_id: int | None = None
+    # Alerts off, monitoring on. `is_silenced` is computed from the clock on
+    # the model, so a lapsed silence reads as false without anything having to
+    # clear the timestamp.
+    is_silenced: bool = False
+    silenced_until: datetime | None = None
+    silence_reason: str | None = None
     # Set when the configured path 404'd and a different one answered, e.g.
     # "/actuator/health". The endpoint's own `url` is left as configured.
     resolved_health_path: str | None = None
@@ -473,6 +479,7 @@ class EndpointRead(EndpointListItem):
     next_check_at: datetime | None = None
     created_by: str | None = None
     updated_by: str | None = None
+    silenced_by: str | None = None
     dependencies: list[EndpointDependencyRead] = Field(default_factory=list)
 
 
@@ -501,6 +508,37 @@ class EndpointStatusUpdate(BaseModel):
         if pausing and not (self.pause_reason or "").strip():
             raise ValueError("a reason is required when pausing monitoring")
         return self
+
+
+class EndpointSilence(BaseModel):
+    """Stop this endpoint's notifications for a while.
+
+    Both fields are required, and the duration is bounded. A silence is meant
+    to outlast a deployment or an afternoon of noise, not a quarter: the thing
+    it must never become is the reason nobody heard about an outage, and an
+    open-ended one always eventually is. `alerts_enabled` on the endpoint is
+    the honest way to turn alerting off for good.
+    """
+
+    minutes: int = Field(
+        ge=5,
+        le=10_080,
+        description="How long to stay silent for, from now. 5 minutes to 7 days.",
+    )
+    reason: str = Field(min_length=3, max_length=255)
+
+    @field_validator("reason")
+    @classmethod
+    def _meaningful(cls, value: str) -> str:
+        """Trimmed, and still a reason afterwards.
+
+        `min_length` alone accepts three spaces, and a silence nobody can
+        explain later is the failure mode this whole field exists to prevent.
+        """
+        trimmed = value.strip()
+        if len(trimmed) < 3:
+            raise ValueError("Say why this endpoint is being silenced.")
+        return trimmed
 
 
 class BulkEndpointAction(BaseModel):
@@ -638,6 +676,7 @@ def endpoint_to_read(
     has_open_incident: bool = False,
     created_by: str | None = None,
     updated_by: str | None = None,
+    silenced_by: str | None = None,
     effective_interval_seconds: int | None = None,
     thresholds: dict[str, int] | None = None,
 ) -> EndpointRead:
@@ -647,6 +686,7 @@ def endpoint_to_read(
     model.has_open_incident = has_open_incident
     model.created_by = created_by
     model.updated_by = updated_by
+    model.silenced_by = silenced_by
     model.effective_interval_seconds = effective_interval_seconds
     if thresholds:
         # From monitoring_service.resolve_thresholds - the same resolution the

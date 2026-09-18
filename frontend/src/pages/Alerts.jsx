@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BellOff, Check, RefreshCw, Trash2 } from 'lucide-react'
+import clsx from 'clsx'
 
 import {
   Clamp,
@@ -350,7 +351,15 @@ export default function Alerts() {
                         </span>
                         {alert.notification_error ? (
                           <p
-                            className="max-w-[12rem] truncate text-[11px] text-red-500"
+                            className={clsx(
+                              'max-w-[12rem] truncate text-[11px]',
+                              // A skipped alert's note is an explanation, not
+                              // a failure: a silenced endpoint reading in red
+                              // looks like the notifications broke.
+                              alert.notification_status === 'skipped'
+                                ? 'text-slate-400'
+                                : 'text-red-500',
+                            )}
                             title={alert.notification_error}
                           >
                             {alert.notification_error}

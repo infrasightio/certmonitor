@@ -250,6 +250,11 @@ export const endpointsApi = {
   create: (payload) => api.post('/endpoints', payload).then((r) => r.data),
   update: (id, payload) => api.put(`/endpoints/${id}`, payload).then((r) => r.data),
   remove: (id) => api.delete(`/endpoints/${id}`).then((r) => r.data),
+  // Alerts off, monitoring on - the opposite trade to pausing, which stops
+  // the checks. Bounded server-side and it expires on its own.
+  silence: (id, payload) =>
+    api.post(`/endpoints/${id}/silence`, payload).then((r) => r.data),
+  unsilence: (id) => api.delete(`/endpoints/${id}/silence`).then((r) => r.data),
   setMonitoring: (id, payload) =>
     api.patch(`/endpoints/${id}/monitoring`, payload).then((r) => r.data),
   check: (id, persist = true) =>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
+  BellOff,
   Download,
   MoreHorizontal,
   Pause,
@@ -14,6 +15,7 @@ import {
 import EndpointForm from '../components/EndpointForm'
 import LiveIndicator from '../components/LiveIndicator'
 import PauseDialog from '../components/PauseDialog'
+import SilenceDialog from '../components/SilenceDialog'
 import {
   ActionMenu,
   Clamp,
@@ -35,6 +37,7 @@ import {
 } from '../components/ui'
 import { endpointsApi, settingsApi } from '../lib/api'
 import {
+  formatDateTime,
   formatDaysRemaining,
   formatInterval,
   formatMs,
@@ -80,6 +83,8 @@ export default function Endpoints() {
   const [deleting, setDeleting] = useState(false)
   // Either a single endpoint, or the string 'selection' for the bulk action.
   const [pauseTarget, setPauseTarget] = useState(null)
+  const [silenceTarget, setSilenceTarget] = useState(null)
+  const [silencing, setSilencing] = useState(false)
   const [pausing, setPausing] = useState(false)
   const [checkingId, setCheckingId] = useState(null)
   const [selected, setSelected] = useState(() => new Set())
@@ -162,7 +167,11 @@ export default function Endpoints() {
   // underneath the selection.
   const { lastRefreshedAt } = useAutoRefresh(refreshAll, {
     interval: SLOW_INTERVAL,
-    paused: selected.size > 0 || formOpen || Boolean(pauseTarget),
+    paused:
+      selected.size > 0 ||
+      formOpen ||
+      Boolean(pauseTarget) ||
+      Boolean(silenceTarget),
   })
 
   // Any filter change invalidates the current page number.
@@ -268,6 +277,31 @@ export default function Endpoints() {
       if (ok) setPauseTarget(null)
     } finally {
       setPausing(false)
+    }
+  }
+
+  const confirmSilence = async ({ minutes, reason }) => {
+    setSilencing(true)
+    try {
+      await endpointsApi.silence(silenceTarget.id, { minutes, reason })
+      toast.success('Alerts silenced. Monitoring continues.')
+      setSilenceTarget(null)
+      load({ silent: true })
+    } catch (err) {
+      // Left open, so the reason typed is not lost with the toast.
+      toast.error(err.message)
+    } finally {
+      setSilencing(false)
+    }
+  }
+
+  const unsilence = async (endpoint) => {
+    try {
+      await endpointsApi.unsilence(endpoint.id)
+      toast.success('Alerts on again.')
+      load({ silent: true })
+    } catch (err) {
+      toast.error(err.message)
     }
   }
 
@@ -649,6 +683,27 @@ export default function Endpoints() {
 
                       <td>
                         <StatusBadge status={endpoint.current_status} pulse />
+                        {/* A silenced endpoint reads as healthy from a
+                            distance - nothing is paging, so nothing looks
+                            wrong. The whole list needs to be able to say
+                            "down, and deliberately quiet". */}
+                        {endpoint.is_silenced ? (
+                          <p
+                            className="mt-0.5 flex items-center gap-1 text-[11px] text-violet-600 dark:text-violet-400"
+                            title={`Alerts silenced until ${formatDateTime(
+                              endpoint.silenced_until,
+                            )}${
+                              endpoint.silence_reason
+                                ? ` — ${endpoint.silence_reason}`
+                                : ''
+                            }`}
+                          >
+                            <BellOff size={11} className="shrink-0" aria-hidden="true" />
+                            <span className="max-w-[12rem] truncate">
+                              silenced {formatRelative(endpoint.silenced_until)}
+                            </span>
+                          </p>
+                        ) : null}
                         {endpoint.is_paused && endpoint.pause_reason ? (
                           <p
                             className="max-w-[14rem] truncate text-[11px] text-amber-600 dark:text-amber-400"
@@ -799,6 +854,20 @@ export default function Endpoints() {
                                   >
                                     {endpoint.is_paused ? 'Resume monitoring' : 'Pause monitoring'}
                                   </button>
+                                  <button
+                                    type="button"
+                                    className={MENU_ITEM}
+                                    role="menuitem"
+                                    onClick={() => {
+                                      close()
+                                      if (endpoint.is_silenced) unsilence(endpoint)
+                                      else setSilenceTarget(endpoint)
+                                    }}
+                                  >
+                                    {endpoint.is_silenced
+                                      ? 'Unsilence alerts'
+                                      : 'Silence alerts'}
+                                  </button>
                                 </>
                               ) : null}
                               {canDelete ? (
@@ -870,6 +939,14 @@ export default function Endpoints() {
             ? `Pause monitoring for ${selected.size} endpoint(s)`
             : `Pause monitoring for '${pauseTarget?.name}'`
         }
+      />
+
+      <SilenceDialog
+        open={Boolean(silenceTarget)}
+        onClose={() => setSilenceTarget(null)}
+        onConfirm={confirmSilence}
+        busy={silencing}
+        endpointName={silenceTarget?.name}
       />
     </>
   )

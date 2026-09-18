@@ -214,6 +214,8 @@ class AuditAction(StrEnum):
     ROLE_CHANGED = "role_changed"
     ENDPOINT_CREATED = "endpoint_created"
     ENDPOINT_UPDATED = "endpoint_updated"
+    ENDPOINT_SILENCED = "endpoint_silenced"
+    ENDPOINT_UNSILENCED = "endpoint_unsilenced"
     ENDPOINT_DELETED = "endpoint_deleted"
     ENDPOINT_CHECKED = "endpoint_checked"
     ENDPOINTS_IMPORTED = "endpoints_imported"

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
+  BellOff,
+  BellRing,
   Clock,
   Globe,
   Network,
@@ -20,6 +22,7 @@ import CapturePanel from '../components/CapturePanel'
 import DiagnosticsPanel from '../components/DiagnosticsPanel'
 import EndpointForm from '../components/EndpointForm'
 import PauseDialog from '../components/PauseDialog'
+import SilenceDialog from '../components/SilenceDialog'
 import LiveIndicator from '../components/LiveIndicator'
 import {
   ChartFrame,
@@ -183,6 +186,8 @@ export default function EndpointDetail() {
   const [deleting, setDeleting] = useState(false)
   const [pauseOpen, setPauseOpen] = useState(false)
   const [pausing, setPausing] = useState(false)
+  const [silenceOpen, setSilenceOpen] = useState(false)
+  const [silencing, setSilencing] = useState(false)
 
   const [diagnosing, setDiagnosing] = useState(false)
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false)
@@ -368,7 +373,8 @@ export default function EndpointDetail() {
       formOpen ||
       confirmDelete ||
       diagnosticsOpen ||
-      pauseOpen,
+      pauseOpen ||
+      silenceOpen,
   })
 
   // ------------------------------------------------------------- actions
@@ -433,6 +439,32 @@ export default function EndpointDetail() {
       toast.error(err.message)
     } finally {
       setPausing(false)
+    }
+  }
+
+  // Silencing needs a window and a reason, so it goes through the dialog;
+  // un-silencing is one click, like resuming.
+  const silenceAlerts = async ({ minutes, reason }) => {
+    setSilencing(true)
+    try {
+      await endpointsApi.silence(endpointId, { minutes, reason })
+      toast.success('Alerts silenced. Monitoring continues.')
+      setSilenceOpen(false)
+      loadEndpoint()
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setSilencing(false)
+    }
+  }
+
+  const unsilenceAlerts = async () => {
+    try {
+      await endpointsApi.unsilence(endpointId)
+      toast.success('Alerts on again.')
+      loadEndpoint()
+    } catch (err) {
+      toast.error(err.message)
     }
   }
 
@@ -520,6 +552,21 @@ export default function EndpointDetail() {
             ) : null}
             {canWrite ? (
               <>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() =>
+                    endpoint.is_silenced ? unsilenceAlerts() : setSilenceOpen(true)
+                  }
+                  title={
+                    endpoint.is_silenced
+                      ? 'Let this endpoint alert again'
+                      : 'Stop the notifications for a while, without stopping the checks'
+                  }
+                >
+                  {endpoint.is_silenced ? <BellRing size={15} /> : <BellOff size={15} />}
+                  {endpoint.is_silenced ? 'Unsilence' : 'Silence'}
+                </button>
                 <button
                   type="button"
                   className="btn-secondary"
@@ -630,6 +677,34 @@ export default function EndpointDetail() {
               >
                 View change
               </Link>
+            ) : null}
+          </div>
+        ) : null}
+
+        {/* Stated on the page, not just in the button: an endpoint that is
+            failing while nobody is being told is the single most misleading
+            state this product can be in, so it says so next to the status. */}
+        {endpoint.is_silenced ? (
+          <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-violet-50 px-3 py-2 text-sm text-violet-900 dark:bg-violet-950/40 dark:text-violet-200">
+            <BellOff size={15} className="shrink-0" aria-hidden="true" />
+            <span>
+              <span className="font-medium">Alerts silenced</span> until{' '}
+              {formatDateTime(endpoint.silenced_until)} (
+              {formatRelative(endpoint.silenced_until)})
+              {endpoint.silence_reason ? ` — ${endpoint.silence_reason}` : ''}
+              {endpoint.silenced_by ? `, by ${endpoint.silenced_by}` : ''}
+            </span>
+            <span className="text-xs">
+              Checks are still running and incidents are still recorded.
+            </span>
+            {canWrite ? (
+              <button
+                type="button"
+                className="ml-auto font-medium underline"
+                onClick={unsilenceAlerts}
+              >
+                Unsilence now
+              </button>
             ) : null}
           </div>
         ) : null}
@@ -1442,6 +1517,14 @@ export default function EndpointDetail() {
         onConfirm={pauseMonitoring}
         busy={pausing}
         title={`Pause monitoring for '${endpoint.name}'`}
+      />
+
+      <SilenceDialog
+        open={silenceOpen}
+        onClose={() => setSilenceOpen(false)}
+        onConfirm={silenceAlerts}
+        busy={silencing}
+        endpointName={endpoint.name}
       />
     </>
   )
