@@ -1,124 +1,117 @@
 // InfraSight CI/CD -- multibranch.
 //
-//   build (kaniko)  ->  push to the in-cluster registry  ->  commit the new
-//   image tag into k8s-gitops  ->  Argo CD syncs it.
+//   build on the NODE  ->  import into containerd  ->  commit the image tag
+//   into k8s-gitops  ->  Argo CD syncs it.
 //
-// Jenkins never touches the cluster directly. The only deploy action is a git
-// commit, which is what makes a rollback `git revert` rather than archaeology.
+// The build does NOT run in a pod. Kaniko-in-cluster was tried and drove load
+// average to 54 on this 2-vCPU box; kubelet's liveness probes timed out and
+// Kubernetes restarted etcd, the apiserver, CoreDNS, Argo CD, Jenkins and the
+// rest. Instead the agent SSHes to the host and runs a single fixed script,
+// which builds with docker and loads the result straight into minikube's
+// containerd. No registry push: the host docker daemon refuses plain HTTP and
+// fixing that would need a dockerd restart, which stops the whole cluster.
+//
+// The SSH key is locked to command="/usr/local/bin/infrasight-build.sh" in
+// authorized_keys, so a compromised Jenkins cannot run arbitrary commands on
+// the host -- only that script, with the ref as its sole argument.
 //
 //   main          -> namespace `infrasight`        (overlays/prod, public)
 //   any other ref -> namespace `infrasight-<slug>` (overlays/<slug>, internal)
-//
-// Kaniko rather than docker: this cluster runs containerd and there is no
-// docker socket to mount. Kaniko needs --insecure because the registry speaks
-// plain HTTP on the node-local bridge.
 
-def REGISTRY   = '192.168.49.2:32005'
 def GITOPS_REPO = 'git@github.com:rgrishabh/k8s-gitops.git'
+def BUILD_HOST  = 'ubuntu@192.168.49.1'      // docker bridge gateway = the EC2 host
 
 pipeline {
   agent {
     kubernetes {
-      defaultContainer 'kaniko'
+      defaultContainer 'tools'
       yaml """
 apiVersion: v1
 kind: Pod
 spec:
   containers:
-    - name: kaniko
-      image: gcr.io/kaniko-project/executor:v1.23.2-debug
-      command: ["/busybox/cat"]
-      tty: true
-      resources:
-        requests: { cpu: "200m", memory: "512Mi" }
-        limits:   { cpu: "2",    memory: "2Gi" }
-    - name: git
-      image: alpine/git:latest
+    - name: tools
+      image: alpine:3.20
       command: ["cat"]
       tty: true
       resources:
-        requests: { cpu: "50m", memory: "64Mi" }
-        limits:   { cpu: "500m", memory: "256Mi" }
+        requests: { cpu: "20m", memory: "48Mi" }
+        limits:   { cpu: "300m", memory: "192Mi" }
 """
     }
   }
 
   options {
-    timeout(time: 45, unit: 'MINUTES')
+    timeout(time: 40, unit: 'MINUTES')
     disableConcurrentBuilds()
     buildDiscarder(logRotator(numToKeepStr: '20'))
   }
 
   environment {
-    TAG      = "${env.GIT_COMMIT.take(7)}"
-    SLUG     = "${env.BRANCH_NAME.toLowerCase().replaceAll(/[^a-z0-9-]/, '-').take(30)}"
-    IS_PROD  = "${env.BRANCH_NAME == 'main'}"
+    SLUG    = "${env.BRANCH_NAME.toLowerCase().replaceAll(/[^a-z0-9-]/, '-').take(30)}"
+    IS_PROD = "${env.BRANCH_NAME == 'main'}"
   }
 
   stages {
-    stage('Build backend') {
+    stage('Prepare') {
       steps {
-        container('kaniko') {
-          sh """
-            /kaniko/executor \
-              --context   \$WORKSPACE/backend \
-              --dockerfile \$WORKSPACE/backend/Dockerfile \
-              --destination ${REGISTRY}/infrasight/backend:${TAG} \
-              --insecure --skip-tls-verify \
-              --snapshot-mode=redo --single-snapshot \
-              --cache=false
-          """
+        sh 'apk add --no-cache openssh-client git >/dev/null'
+      }
+    }
+
+    stage('Build on node') {
+      steps {
+        sshagent(credentials: ['node-build-ssh']) {
+          script {
+            // The forced command ignores what we ask for and reads the ref
+            // from SSH_ORIGINAL_COMMAND, so this is the ref and nothing else.
+            def out = sh(
+              returnStdout: true,
+              script: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${BUILD_HOST} '${env.GIT_COMMIT}'"
+            ).trim()
+            echo out
+            def m = (out =~ /BUILT_SHA=([0-9a-f]+)/)
+            if (!m) { error 'node build did not report BUILT_SHA' }
+            env.TAG = m[0][1]
+            echo "built and imported: ${env.TAG}"
+          }
         }
       }
     }
 
-    stage('Build frontend') {
+    stage('Deploy: commit image tag') {
       steps {
-        container('kaniko') {
-          // Context is the repo ROOT, not ./frontend: the image also serves
-          // docs/ at /docs, so the build has to span both.
+        sshagent(credentials: ['k8s-gitops-ssh']) {
+          sh '''
+            set -e
+            mkdir -p ~/.ssh && ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
+
+            if ! git ls-remote ''' + GITOPS_REPO + ''' >/dev/null 2>&1; then
+              echo "=================================================================="
+              echo " Cannot write to k8s-gitops."
+              echo " The deploy key below needs adding to rgrishabh/k8s-gitops with"
+              echo " 'Allow write access' ticked. The images ARE built and loaded into"
+              echo " containerd -- only the git commit that triggers Argo CD is blocked."
+              echo "=================================================================="
+              exit 1
+            fi
+          '''
           sh """
-            /kaniko/executor \
-              --context   \$WORKSPACE \
-              --dockerfile \$WORKSPACE/frontend/Dockerfile \
-              --destination ${REGISTRY}/infrasight/frontend:${TAG} \
-              --insecure --skip-tls-verify \
-              --snapshot-mode=redo --single-snapshot \
-              --cache=false
-          """
-        }
-      }
-    }
+            set -e
+            rm -rf /tmp/gitops
+            git clone --depth 1 ${GITOPS_REPO} /tmp/gitops
+            cd /tmp/gitops
+            git config user.name  'jenkins'
+            git config user.email 'jenkins@rgrishabh.in'
 
-    stage('Deploy: commit image tag to k8s-gitops') {
-      steps {
-        container('git') {
-          sshagent(credentials: ['k8s-gitops-ssh']) {
-            sh """
-              set -e
-              apk add --no-cache openssh-client >/dev/null 2>&1 || true
-              mkdir -p ~/.ssh && ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
-
-              rm -rf /tmp/gitops
-              git clone --depth 1 ${GITOPS_REPO} /tmp/gitops
-              cd /tmp/gitops
-              git config user.name  'jenkins'
-              git config user.email 'jenkins@rgrishabh.in'
-
-              if [ "${IS_PROD}" = "true" ]; then
-                OVERLAY=apps/infrasight/overlays/prod
-              else
-                OVERLAY=apps/infrasight/overlays/${SLUG}
-                # Generate a preview overlay the first time this branch builds.
-                # No NodePort patch: preview environments stay cluster-internal.
-                if [ ! -d "\$OVERLAY" ]; then
-                  mkdir -p "\$OVERLAY"
-                  cat > "\$OVERLAY/namespace.yaml" <<YML
-apiVersion: v1
-kind: Namespace
-metadata: { name: infrasight-${SLUG} }
-YML
-                  cat > "\$OVERLAY/kustomization.yaml" <<YML
+            if [ "${IS_PROD}" = "true" ]; then
+              OVERLAY=apps/infrasight/overlays/prod
+            else
+              OVERLAY=apps/infrasight/overlays/${SLUG}
+              if [ ! -d "\$OVERLAY" ]; then
+                mkdir -p "\$OVERLAY"
+                printf 'apiVersion: v1\\nkind: Namespace\\nmetadata: { name: infrasight-${SLUG} }\\n' > "\$OVERLAY/namespace.yaml"
+                cat > "\$OVERLAY/kustomization.yaml" <<YML
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: infrasight-${SLUG}
@@ -127,36 +120,35 @@ resources:
   - namespace.yaml
 images:
   - name: infrasight/backend
-    newName: ${REGISTRY}/infrasight/backend
+    newName: 192.168.49.2:32005/infrasight/backend
     newTag: ${TAG}
   - name: infrasight/frontend
-    newName: ${REGISTRY}/infrasight/frontend
+    newName: 192.168.49.2:32005/infrasight/frontend
     newTag: ${TAG}
 YML
-                fi
               fi
+            fi
 
-              # Rewrite only the two newTag lines.
-              sed -i "s|^    newTag: .*|    newTag: ${TAG}|" "\$OVERLAY/kustomization.yaml"
+            sed -i "s|^    newTag: .*|    newTag: ${TAG}|" "\$OVERLAY/kustomization.yaml"
 
-              if git diff --quiet && git diff --cached --quiet && [ -z "\$(git status --porcelain)" ]; then
-                echo "image tag already ${TAG} - nothing to commit"
-              else
-                git add -A
-                git commit -m "infrasight: ${BRANCH_NAME} -> ${TAG}
+            if [ -z "\$(git status --porcelain)" ]; then
+              echo "already at ${TAG} - nothing to commit"
+            else
+              git add -A
+              git commit -m "infrasight: ${BRANCH_NAME} -> ${TAG}
 
-Built from certmonitor@${GIT_COMMIT} by Jenkins ${BUILD_NUMBER}."
-                git push origin HEAD:main
-              fi
-            """
-          }
+Built on the node from certmonitor@${GIT_COMMIT} by Jenkins ${BUILD_NUMBER}."
+              git push origin HEAD:main
+              echo "pushed - Argo CD will sync within ~3 minutes"
+            fi
+          """
         }
       }
     }
   }
 
   post {
-    success { echo "Pushed ${TAG}. Argo CD will sync within ~3 minutes, or sync it now in the UI." }
-    failure { echo "Build failed - the cluster is untouched, because deploys only happen via a git commit." }
+    success { echo "InfraSight ${env.TAG} deployed via git. Argo CD does the rollout." }
+    failure { echo "Failed. The cluster is untouched: deploys only happen through a git commit." }
   }
 }
